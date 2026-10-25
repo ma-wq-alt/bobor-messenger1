@@ -15,47 +15,28 @@ const db = (TURSO_URL && TURSO_TOKEN) ? createClient({ url: TURSO_URL, authToken
 async function initDB() {
   if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
   try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        chat_id TEXT, 
-        from_email TEXT, 
-        from_name TEXT, 
-        text TEXT, 
-        image_url TEXT, 
-        date TEXT
-      )
-    `);
-    
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS profiles (
-        email TEXT PRIMARY KEY, 
-        avatar_url TEXT
-      )
-    `);
-    
-    // Пытаемся добавить колонку на случай, если таблица старая
+    await db.execute(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT, from_email TEXT, from_name TEXT, text TEXT, image_url TEXT, date TEXT)`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS profiles (email TEXT PRIMARY KEY, avatar_url TEXT)`);
     try { await db.execute('ALTER TABLE messages ADD COLUMN image_url TEXT'); } catch(e) {}
-    
     console.log('✅ База готова к работе');
-  } catch (e) { 
-    console.error('❌ Ошибка базы:', e.message); 
-  }
+  } catch (e) { console.error('❌ Ошибка базы:', e.message); }
 }
 
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет подключения к базе' });
   try {
-    const u = await db.execute({ sql: 'SELECT email, name, display_name, pwd FROM users WHERE email = ?', args: [email] });
+    const u = await db.execute({ sql: 'SELECT email, name, display_name, pwd, role FROM users WHERE email = ?', args: [email] });
     if (u.rows.length === 0) return res.status(401).json({ error: 'Аккаунт не найден' });
     if (u.rows[0].pwd !== password) return res.status(401).json({ error: 'Неверный пароль' });
     
     const name = u.rows[0].display_name || u.rows[0].name;
+    const role = u.rows[0].role || 'user';
+    
     const profile = await db.execute({ sql: 'SELECT avatar_url FROM profiles WHERE email = ?', args: [u.rows[0].email] });
     const avatar = profile.rows.length > 0 ? profile.rows[0].avatar_url : '';
 
-    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: 'user', avatar } });
+    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: role, avatar } });
   } catch (e) { res.status(500).json({ error: 'Ошибка базы' }); }
 });
 
@@ -67,14 +48,23 @@ app.get('/api/users', async (req, res) => {
   } catch(e) { res.json([]); }
 });
 
+// УДАЛЕНИЕ АККАУНТА
+app.post('/api/admin/delete_user', async (req, res) => {
+  const { targetEmail } = req.body;
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
+  try {
+    await db.execute({ sql: 'DELETE FROM users WHERE email = ?', args: [targetEmail] });
+    await db.execute({ sql: 'DELETE FROM accounts WHERE email = ?', args: [targetEmail] });
+    await db.execute({ sql: 'DELETE FROM profiles WHERE email = ?', args: [targetEmail] });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/profile/avatar', async (req, res) => {
   const { email, avatar_url } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
   try {
-    await db.execute({ 
-      sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, 
-      args: [email, avatar_url, avatar_url] 
-    });
+    await db.execute({ sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, args: [email, avatar_url, avatar_url] });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -90,21 +80,11 @@ app.get('/api/messages/:chat_id', async (req, res) => {
 app.post('/api/messages', async (req, res) => {
   const { chat_id, from_email, from_name, text, image_url } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
-  
-  if ((!text || !text.trim()) && !image_url) {
-    return res.status(400).json({ error: 'Пустое сообщение' });
-  }
-
+  if ((!text || !text.trim()) && !image_url) return res.status(400).json({ error: 'Пустое' });
   try {
-    await db.execute({ 
-      sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', 
-      args: [chat_id, from_email, from_name, text || '', image_url || '', new Date().toLocaleString('ru-RU')] 
-    });
+    await db.execute({ sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', args: [chat_id, from_email, from_name, text || '', image_url || '', new Date().toLocaleString('ru-RU')] });
     res.json({ success: true });
-  } catch (e) { 
-    console.error('Ошибка записи:', e.message);
-    res.status(500).json({ error: e.message }); 
-  }
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 const PORT = process.env.PORT || 3000;
