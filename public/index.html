@@ -22,7 +22,7 @@
   .chat-sidebar .user-item:hover { background: #1a1a1a; }
   .chat-sidebar .user-item.active { background: rgba(255,61,0,.15); color: #FF3D00; }
   
-  .avatar { width: 36px; height: 36px; border-radius: 50%; background: #26262E; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 16px; flex-shrink: 0; background-size: cover; background-position: center;}
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: #26262E; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 16px; flex-shrink: 0; background-size: cover; background-position: center; overflow: hidden;}
   
   .chat-main { flex: 1; display: flex; flex-direction: column; background: #000; border: 1px solid #26262E; border-radius: 10px; padding: 15px; }
   .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; }
@@ -36,8 +36,6 @@
   
   #profile-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
   #profile-modal .card { width: 300px; }
-  
-  /* Скрываем стандартный инпут для файла */
   #file-input { display: none; }
 </style>
 </head>
@@ -92,7 +90,6 @@
         <div class="chat-messages" id="chat-messages"></div>
         
         <div style="display:flex; gap:10px; align-items:center">
-          <!-- Кнопка выбора файла -->
           <input type="file" id="file-input" accept="image/*" onchange="uploadPhoto(this)">
           <label for="file-input" class="btn" style="background:#26262E; padding:10px; cursor:pointer; margin:0" title="Отправить фото">📷</label>
           
@@ -122,6 +119,8 @@ function doLogin() {
     if (r.ok) {
       const data = await r.json();
       currentUser = data.user;
+      // Принудительно делаем email в нижнем регистре для надежности
+      currentUser.email = currentUser.email.toLowerCase();
       localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
       showMainUI();
     } else {
@@ -135,6 +134,7 @@ function checkSavedLogin() {
   const saved = localStorage.getItem('bobor_messenger_user');
   if (saved) {
     currentUser = JSON.parse(saved);
+    currentUser.email = currentUser.email.toLowerCase();
     showMainUI();
   } else {
     document.getElementById('login-screen').style.display = 'block';
@@ -163,7 +163,7 @@ function showMainUI() {
 function updateMyAvatar() {
   const av = document.getElementById('my-avatar');
   if (currentUser.avatar) {
-    av.style.backgroundImage = `url(${currentUser.avatar})`;
+    av.style.backgroundImage = `url('${currentUser.avatar}')`;
     av.innerText = '';
   } else {
     av.style.backgroundImage = 'none';
@@ -173,7 +173,7 @@ function updateMyAvatar() {
 }
 
 function makeAvatar(name, avatarUrl, bgColor) {
-  if (avatarUrl) return `<div class="avatar" style="background-image:url(${avatarUrl})"></div>`;
+  if (avatarUrl) return `<div class="avatar" style="background-image:url('${avatarUrl}')"></div>`;
   return `<div class="avatar" style="background:${bgColor}">${name[0].toUpperCase()}</div>`;
 }
 
@@ -204,14 +204,17 @@ function loadUsersList() {
     const container = document.getElementById('users-list-container');
     container.innerHTML = '';
     users.forEach(u => {
-      if (u.email === currentUser.email) return;
+      // ИСПРАВЛЕНИЕ БАГА: Сравниваем email в нижнем регистре, чтобы себя не показывало
+      if (u.email.toLowerCase() === currentUser.email.toLowerCase()) return; 
+      
       const el = document.createElement('div');
       el.className = 'user-item';
       el.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        currentChatId = [currentUser.email, u.email].sort().join('_');
+        // Делаем ID чата тоже в нижнем регистре, чтобы всегда совпадало
+        currentChatId = [currentUser.email.toLowerCase(), u.email.toLowerCase()].sort().join('_');
         document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
         loadChat();
       };
@@ -234,13 +237,13 @@ function loadChat() {
     const box = document.getElementById('chat-messages');
     box.innerHTML = '';
     data.forEach(m => {
-      const isMe = m.from_email === currentUser.email;
-      const sender = allUsers.find(u => u.email === m.from_email);
+      // ИСПРАВЛЕНИЕ: Сравниваем отправителя с тобой в нижнем регистре
+      const isMe = m.from_email.toLowerCase() === currentUser.email.toLowerCase();
+      const sender = allUsers.find(u => u.email.toLowerCase() === m.from_email.toLowerCase());
       const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
       
       let content = '';
       if (m.text) content += `<div class="msg-bubble">${m.text}</div>`;
-      // Если в image_url лежит Base64 (начинается на data:image) или обычная ссылка
       if (m.image_url) content += `<img src="${m.image_url}" class="msg-img" onclick="window.open(this.src)">`;
 
       const div = document.createElement('div'); 
@@ -270,18 +273,16 @@ function sendMsg() {
   }).then(() => { input.value = ''; loadChat(); });
 }
 
-// ЗАГРУЗКА ФОТО С ТЕЛЕФОНА
 function uploadPhoto(input) {
   const file = input.files[0];
   if (!file) return;
   
-  // Сжимаем фото, чтобы не перегружать базу
   const reader = new FileReader();
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 800; // Максимальная ширина картинки
+      const MAX_WIDTH = 800;
       let width = img.width;
       let height = img.height;
       
@@ -295,21 +296,14 @@ function uploadPhoto(input) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
       
-      // Получаем сжатое изображение в формате Base64 (JPEG, качество 70%)
       const base64 = canvas.toDataURL('image/jpeg', 0.7);
       
-      // Отправляем на сервер
       fetch('/api/messages', { 
         method: 'POST', 
         headers: {'Content-Type': 'application/json'}, 
-        body: JSON.stringify({ 
-          chat_id: currentChatId, 
-          from_email: currentUser.email, 
-          from_name: currentUser.name, 
-          image_data: base64 
-        }) 
+        body: JSON.stringify({ chat_id: currentChatId, from_email: currentUser.email, from_name: currentUser.name, image_data: base64 }) 
       }).then(() => { 
-        input.value = ''; // Очищаем инпут
+        input.value = ''; 
         loadChat(); 
       });
     };
