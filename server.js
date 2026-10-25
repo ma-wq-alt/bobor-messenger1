@@ -1,395 +1,111 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BOBOR MESSENGER</title>
-<style>
-  body{background:#0B0B0F;color:#fff;font-family:Arial,sans-serif;margin:0;padding:20px}
-  .wrap{max-width:900px;margin:0 auto}
-  .card{background:#15151B;border:1px solid #26262E;border-radius:12px;padding:20px;margin-bottom:15px}
-  .btn{background:#FF3D00;color:#fff;border:0;padding:10px 15px;border-radius:8px;font-weight:bold;cursor:pointer;font-family:inherit; transition: 0.2s;}
-  .btn:hover{opacity:0.8}
-  .btn-outline{background:transparent;border:1px solid #FF3D00;color:#FF3D00;}
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;}
-  .form-group { margin-bottom: 12px; }
-  .form-group label { display: block; font-size: 13px; color: #8A8A93; margin-bottom: 5px; }
-  input{width:100%;padding:10px;border-radius:8px;border:1px solid #333;background:#000;color:#fff;box-sizing:border-box;font-family:inherit;}
-  input:focus { outline: none; border-color: #FF3D00; }
-  
-  .chat-container { display: flex; gap: 10px; height: 600px; }
-  .chat-sidebar { width: 250px; background: #000; border: 1px solid #26262E; border-radius: 10px; overflow-y: auto; padding: 10px; }
-  .chat-sidebar .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-radius: 8px; margin-bottom: 5px; color: #8A8A93; transition: 0.2s;}
-  .chat-sidebar .user-item:hover { background: #1a1a1a; }
-  .chat-sidebar .user-item.active { background: rgba(255,61,0,.15); color: #FF3D00; }
-  
-  .avatar { width: 36px; height: 36px; border-radius: 50%; background: #26262E; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 16px; flex-shrink: 0; background-size: cover; background-position: center;}
-  
-  .chat-main { flex: 1; display: flex; flex-direction: column; background: #000; border: 1px solid #26262E; border-radius: 10px; padding: 15px; }
-  .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px; }
-  .msg { display: flex; gap: 10px; max-width: 85%; position: relative; group;}
-  .msg.my { align-self: flex-end; flex-direction: row-reverse; }
-  .msg-bubble { background: #15151B; padding: 10px 14px; border-radius: 12px; font-size: 15px; word-break: break-word; position: relative;}
-  .msg.my .msg-bubble { background: #FF3D00; }
-  .msg-name { font-size: 11px; color: #8A8A93; margin-bottom: 4px; }
-  .msg-img { max-width: 100%; border-radius: 8px; margin-top: 5px; cursor: pointer; max-height: 300px; object-fit: cover;}
-  
-  .reply-block { background: rgba(0,0,0,0.3); border-left: 3px solid #C6FF00; padding: 5px 8px; border-radius: 4px; font-size: 12px; color: #ccc; margin-bottom: 5px;}
-  
-  /* Кнопки действий при наведении */
-  .msg-actions { display: none; position: absolute; top: -10px; right: 0; background: #26262E; border-radius: 6px; padding: 2px; gap: 2px;}
-  .msg:hover .msg-actions { display: flex; }
-  .msg.my .msg-actions { right: auto; left: 0; }
-  .msg-action-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px; color: #fff;}
-  .msg-action-btn:hover { color: #FF3D00; }
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createClient } from '@libsql/client';
 
-  /* Плашка ответа над полем ввода */
-  #reply-indicator { display: none; background: #26262E; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #C6FF00; font-size: 13px; color: #ddd; justify-content: space-between; align-items: center;}
-  
-  .login-box { max-width: 400px; margin: 50px auto; }
-  #profile-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
-  #profile-modal .card { width: 300px; }
-  .header-actions { display:flex; align-items:center; gap:10px; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  
-  <div id="profile-modal">
-    <div class="card">
-      <h3 style="margin-top:0">Мой профиль</h3>
-      <div class="form-group">
-        <label>Ссылка на фото (URL)</label>
-        <input type="text" id="avatar-url-input" placeholder="https://.../photo.jpg">
-      </div>
-      <button class="btn" onclick="saveAvatar()">Сохранить</button>
-      <button class="btn btn-outline" onclick="document.getElementById('profile-modal').style.display='none'">Отмена</button>
-    </div>
-  </div>
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-  <div class="card login-box" id="login-screen">
-    <h2 style="text-align:center">💬 BOBOR MESSENGER</h2>
-    <p style="text-align:center;color:#8A8A93">Вход через аккаунт банка</p>
-    <div class="form-group"><label>Email</label><input type="email" id="log-email" placeholder="your@email.com"></div>
-    <div class="form-group"><label>Пароль</label><input type="password" id="log-pass" placeholder="Пароль"></div>
-    <button class="btn" style="width:100%" onclick="doLogin()">Войти</button>
-  </div>
+const TURSO_URL = process.env.TURSO_URL;
+const TURSO_TOKEN = process.env.TURSO_TOKEN;
+const db = (TURSO_URL && TURSO_TOKEN) ? createClient({ url: TURSO_URL, authToken: TURSO_TOKEN }) : null;
 
-  <div id="main-ui" style="display:none">
-    <div class="header">
-      <h1>💬 BOBOR MESSENGER</h1>
-      <div class="header-actions">
-        <div class="avatar" id="my-avatar" onclick="openProfile()" title="Изменить аватарку" style="cursor:pointer"></div>
-        <b id="my-name" onclick="openProfile()" style="cursor:pointer; margin-right:10px;"></b>
-        <button class="btn" style="background:#26262E" onclick="location.reload()">🔄 Обновить</button>
-        <button class="btn" onclick="logout()">Выйти</button>
-      </div>
-    </div>
-
-    <div class="chat-container">
-      <div class="chat-sidebar" id="chat-sidebar">
-        <div style="padding: 10px; font-size: 12px; color: #8A8A93; text-transform: uppercase;">Общий чат</div>
-        <div class="user-item active" onclick="selectChat('general', 'Общий чат', this)">
-          <div class="avatar" style="background:#00C878">#</div> Общий чат
-        </div>
-        <div class="user-item" onclick="selectChat('news_channel', 'Новости', this)">
-          <div class="avatar" style="background:#C6FF00;color:#000">📢</div> Новости
-        </div>
-        <div style="padding: 10px; font-size: 12px; color: #8A8A93; text-transform: uppercase; margin-top:10px;">Личные чаты</div>
-        <div id="users-list-container"></div>
-      </div>
-      
-      <div class="chat-main">
-        <div style="margin-bottom:15px; font-weight:bold; font-size:18px; color:#fff;" id="chat-header">Общий чат</div>
-        <div class="chat-messages" id="chat-messages"></div>
-        
-        <div id="reply-indicator">
-          <div>Ответ на: <span id="reply-text" style="font-style:italic; color:#C6FF00;"></span></div>
-          <button class="btn-outline btn" style="padding:2px 6px; font-size:12px" onclick="cancelReply()">✖</button>
-        </div>
-
-        <div style="display:flex; gap:10px; align-items:center">
-          <input type="file" id="file-input" accept="image/*" onchange="uploadPhoto(this)" style="display:none">
-          <label for="file-input" class="btn" style="background:#26262E; padding:10px; cursor:pointer; margin:0" title="Отправить фото">📷</label>
-          
-          <input type="text" id="chat-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter') sendMsg()">
-          <button class="btn" onclick="sendMsg()">➤</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-let currentUser = null;
-let currentChatId = 'general';
-let allUsers = [];
-let replyToText = null; // Храним текст сообщения, на которое отвечаем
-
-function doLogin() {
-  const email = document.getElementById('log-email').value;
-  const password = document.getElementById('log-pass').value;
-  if (!email || !password) return alert('Заполните все поля');
-
-  fetch('/api/login', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email, password })
-  }).then(async r => {
-    if (r.ok) {
-      const data = await r.json();
-      currentUser = data.user;
-      localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
-      showMainUI();
-    } else {
-      const err = await r.json();
-      alert(err.error || 'Ошибка входа');
-    }
-  });
-}
-
-function checkSavedLogin() {
-  const saved = localStorage.getItem('bobor_messenger_user');
-  if (saved) {
-    currentUser = JSON.parse(saved);
-    showMainUI();
-  } else {
-    document.getElementById('login-screen').style.display = 'block';
+async function initDB() {
+  if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        chat_id TEXT, 
+        from_email TEXT, 
+        from_name TEXT, 
+        text TEXT, 
+        image_url TEXT, 
+        date TEXT
+      )
+    `);
+    
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS profiles (
+        email TEXT PRIMARY KEY, 
+        avatar_url TEXT
+      )
+    `);
+    
+    // Пытаемся добавить колонку на случай, если таблица старая
+    try { await db.execute('ALTER TABLE messages ADD COLUMN image_url TEXT'); } catch(e) {}
+    
+    console.log('✅ База готова к работе');
+  } catch (e) { 
+    console.error('❌ Ошибка базы:', e.message); 
   }
 }
 
-function logout() {
-  localStorage.removeItem('bobor_messenger_user');
-  location.reload();
-}
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!db) return res.status(500).json({ error: 'Нет подключения к базе' });
+  try {
+    const u = await db.execute({ sql: 'SELECT email, name, display_name, pwd FROM users WHERE email = ?', args: [email] });
+    if (u.rows.length === 0) return res.status(401).json({ error: 'Аккаунт не найден' });
+    if (u.rows[0].pwd !== password) return res.status(401).json({ error: 'Неверный пароль' });
+    
+    const name = u.rows[0].display_name || u.rows[0].name;
+    const profile = await db.execute({ sql: 'SELECT avatar_url FROM profiles WHERE email = ?', args: [u.rows[0].email] });
+    const avatar = profile.rows.length > 0 ? profile.rows[0].avatar_url : '';
 
-function showMainUI() {
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('main-ui').style.display = 'block';
-  
-  updateMyAvatar();
-  loadUsersList();
-  loadChat();
-  
-  setInterval(() => { 
-    loadChat(); 
-    loadUsersList(); 
-  }, 2000);
-}
+    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: 'user', avatar } });
+  } catch (e) { res.status(500).json({ error: 'Ошибка базы' }); }
+});
 
-function updateMyAvatar() {
-  const av = document.getElementById('my-avatar');
-  if (currentUser.avatar) {
-    av.style.backgroundImage = `url(${currentUser.avatar})`;
-    av.innerText = '';
-  } else {
-    av.style.backgroundImage = 'none';
-    av.innerText = currentUser.name[0].toUpperCase();
-  }
-  document.getElementById('my-name').innerText = currentUser.name + (currentUser.role === 'admin' ? ' (Админ)' : '');
-}
+app.get('/api/users', async (req, res) => {
+  if (!db) return res.json([]);
+  try {
+    const r = await db.execute('SELECT users.email, users.name, users.display_name, profiles.avatar_url FROM users LEFT JOIN profiles ON users.email = profiles.email');
+    res.json(r.rows.map(u => ({ email: u.email, name: u.display_name || u.name, avatar: u.avatar_url || '' })));
+  } catch(e) { res.json([]); }
+});
 
-function makeAvatar(name, avatarUrl, bgColor) {
-  if (avatarUrl) return `<div class="avatar" style="background-image:url(${avatarUrl})"></div>`;
-  return `<div class="avatar" style="background:${bgColor}">${name[0].toUpperCase()}</div>`;
-}
-
-function openProfile() {
-  document.getElementById('avatar-url-input').value = currentUser.avatar || '';
-  document.getElementById('profile-modal').style.display = 'flex';
-}
-
-function saveAvatar() {
-  const url = document.getElementById('avatar-url-input').value;
-  fetch('/api/profile/avatar', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email: currentUser.email, avatar_url: url })
-  }).then(() => {
-    currentUser.avatar = url;
-    localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
-    updateMyAvatar();
-    document.getElementById('profile-modal').style.display = 'none';
-    loadChat();
-    loadUsersList();
-  });
-}
-
-function getChatId(email1, email2) {
-  return email1.replace(/[@.]/g, '_') + '___' + email2.replace(/[@.]/g, '_');
-}
-
-function loadUsersList() {
-  fetch('/api/users').then(r => r.json()).then(users => {
-    allUsers = users;
-    const container = document.getElementById('users-list-container');
-    container.innerHTML = '';
-    users.forEach(u => {
-      if (u.email === currentUser.email) return;
-      const el = document.createElement('div');
-      el.className = 'user-item';
-      el.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
-      el.onclick = () => {
-        document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
-        el.classList.add('active');
-        currentChatId = getChatId(currentUser.email, u.email);
-        document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
-        cancelReply(); // Сбрасываем ответ при смене чата
-        loadChat();
-      };
-      container.appendChild(el);
+app.post('/api/profile/avatar', async (req, res) => {
+  const { email, avatar_url } = req.body;
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
+  try {
+    await db.execute({ 
+      sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, 
+      args: [email, avatar_url, avatar_url] 
     });
-  });
-}
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
-function selectChat(id, name, el) {
-  document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
-  el.classList.add('active');
-  currentChatId = id;
-  document.getElementById('chat-header').innerText = name;
-  cancelReply();
-  loadChat();
-}
+app.get('/api/messages/:chat_id', async (req, res) => {
+  if (!db) return res.json([]);
+  try {
+    const r = await db.execute({ sql: 'SELECT * FROM messages WHERE chat_id = ? ORDER BY id', args: [req.params.chat_id] });
+    res.json(r.rows);
+  } catch (e) { res.json([]); }
+});
 
-function loadChat() {
-  if (!currentUser) return;
-  fetch('/api/messages/' + currentChatId).then(r => r.json()).then(data => {
-    const box = document.getElementById('chat-messages');
-    box.innerHTML = '';
-    data.forEach(m => {
-      const isMe = m.from_email === currentUser.email;
-      const sender = allUsers.find(u => u.email === m.from_email);
-      const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
-      
-      // Блок ответа (цитата)
-      let replyHtml = '';
-      if (m.reply_to) {
-        replyHtml = `<div class="reply-block">${m.reply_to}</div>`;
-      }
-
-      let content = '';
-      if (m.text) content += `<div class="msg-bubble">${replyHtml}${m.text}</div>`;
-      if (m.image_url) content += `<img src="${m.image_url}" class="msg-img" onclick="window.open(this.src)">`;
-
-      const div = document.createElement('div'); 
-      div.className = 'msg' + (isMe ? ' my' : '');
-      div.innerHTML = `
-        ${makeAvatar(m.from_name, senderAvatar, isMe ? '#FF3D00' : '#26262E')}
-        <div style="position:relative;">
-           <div class="msg-name">${m.from_name}</div>
-           ${content}
-           <!-- Кнопки действий -->
-           <div class="msg-actions">
-             <button class="msg-action-btn" onclick="setReply('${m.from_name}: ${m.text || 'Фото'}')" title="Ответить">↩️</button>
-             ${(isMe || currentUser.role === 'admin') ? `<button class="msg-action-btn" onclick="deleteMsg(${m.id})" title="Удалить">🗑️</button>` : ''}
-           </div>
-        </div>
-      `;
-      box.appendChild(div);
-    });
-    box.scrollTop = box.scrollHeight;
-  });
-}
-
-// --- ОТВЕТЫ ---
-function setReply(text) {
-  replyToText = text;
-  document.getElementById('reply-text').innerText = text;
-  document.getElementById('reply-indicator').style.display = 'flex';
-  document.getElementById('chat-input').focus();
-}
-
-function cancelReply() {
-  replyToText = null;
-  document.getElementById('reply-indicator').style.display = 'none';
-}
-
-// --- УДАЛЕНИЕ ---
-function deleteMsg(id) {
-  if(!confirm('Удалить это сообщение?')) return;
-  fetch('/api/messages/' + id, { 
-    method: 'DELETE', 
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email: currentUser.email, role: currentUser.role })
-  }).then(async r => {
-    if(!r.ok) { const e = await r.json(); alert(e.error); }
-    else { loadChat(); }
-  });
-}
-
-function sendMsg() {
-  const input = document.getElementById('chat-input');
-  const text = input.value;
-  if(!text.trim() || !currentUser) return;
+app.post('/api/messages', async (req, res) => {
+  const { chat_id, from_email, from_name, text, image_url } = req.body;
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
   
-  fetch('/api/messages', { 
-    method: 'POST', 
-    headers: {'Content-Type': 'application/json'}, 
-    body: JSON.stringify({ 
-      chat_id: currentChatId, 
-      from_email: currentUser.email, 
-      from_name: currentUser.name, 
-      text: text,
-      reply_to: replyToText
-    }) 
-  }).then(async r => {
-    if(!r.ok) { const e = await r.json(); alert('Ошибка: ' + e.error); }
-    else { input.value = ''; cancelReply(); loadChat(); }
-  });
-}
-
-function uploadPhoto(input) {
-  const file = input.files[0];
-  if (!file) return;
-  
-  if (file.size > 2 * 1024 * 1024) {
-    alert('Фото слишком большое (макс 2 МБ).');
-    input.value = '';
-    return;
+  if ((!text || !text.trim()) && !image_url) {
+    return res.status(400).json({ error: 'Пустое сообщение' });
   }
 
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 600;
-      let width = img.width;
-      let height = img.height;
-      
-      if (width > MAX_WIDTH) {
-        height = Math.round((height * MAX_WIDTH) / width);
-        width = MAX_WIDTH;
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      const base64 = canvas.toDataURL('image/jpeg', 0.6);
-      
-      fetch('/api/messages', { 
-        method: 'POST', 
-        headers: {'Content-Type': 'application/json'}, 
-        body: JSON.stringify({ 
-          chat_id: currentChatId, 
-          from_email: currentUser.email, 
-          from_name: currentUser.name, 
-          image_url: base64 
-        }) 
-      }).then(async r => { 
-        if(!r.ok) { const e = await r.json(); alert('Ошибка фото: ' + e.error); }
-        else { loadChat(); }
-        input.value = ''; 
-      });
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
+  try {
+    await db.execute({ 
+      sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', 
+      args: [chat_id, from_email, from_name, text || '', image_url || '', new Date().toLocaleString('ru-RU')] 
+    });
+    res.json({ success: true });
+  } catch (e) { 
+    console.error('Ошибка записи:', e.message);
+    res.status(500).json({ error: e.message }); 
+  }
+});
 
-checkSavedLogin();
-</script>
-</body>
-</html>
+const PORT = process.env.PORT || 3000;
+initDB().then(() => app.listen(PORT, () => console.log(`💬 MESSENGER на :${PORT}`)));
