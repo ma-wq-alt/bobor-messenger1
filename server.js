@@ -23,11 +23,9 @@ async function initDB() {
   } catch (e) { console.error('❌ Ошибка базы:', e.message); }
 }
 
-// Вход
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-  if (!db) return res.status(500).json({ error: 'Нет подключения к базе' });
-  
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
   const cleanEmail = (email || '').trim().toLowerCase();
   try {
     const u = await db.execute({ sql: 'SELECT email, name, display_name, pwd FROM users WHERE LOWER(email) = ?', args: [cleanEmail] });
@@ -39,10 +37,9 @@ app.post('/api/login', async (req, res) => {
     const avatar = profile.rows.length > 0 ? profile.rows[0].avatar_url : '';
 
     return res.json({ success: true, user: { name: name, email: cleanEmail, avatar } });
-  } catch (e) { res.status(500).json({ error: 'Ошибка базы' }); }
+  } catch (e) { res.status(500).json({ error: 'Ошибка' }); }
 });
 
-// Список людей (исправлен регистр)
 app.get('/api/users', async (req, res) => {
   if (!db) return res.json([]);
   try {
@@ -51,7 +48,6 @@ app.get('/api/users', async (req, res) => {
   } catch(e) { res.json([]); }
 });
 
-// Аватарка
 app.post('/api/profile/avatar', async (req, res) => {
   const { email, avatar_url } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
@@ -62,7 +58,6 @@ app.post('/api/profile/avatar', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Получить сообщения
 app.get('/api/messages/:chat_id', async (req, res) => {
   if (!db) return res.json([]);
   try {
@@ -71,11 +66,9 @@ app.get('/api/messages/:chat_id', async (req, res) => {
   } catch (e) { res.json([]); }
 });
 
-// Отправить сообщение/фото
 app.post('/api/messages', async (req, res) => {
   const { chat_id, from_email, from_name, text, image_data } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
-  
   try {
     await db.execute({ 
       sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', 
@@ -86,4 +79,4 @@ app.post('/api/messages', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-initDB().then(() => app.listen(PORT, () => console.log(`💬 BOBOR MESSENGER на :${PORT}`)));
+initDB().then(() => app.listen(PORT, () => console.log(`💬 MESSENGER на :${PORT}`)));
