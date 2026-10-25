@@ -40,7 +40,7 @@
   #profile-modal .card { width: 300px; }
   
   .header-actions { display:flex; align-items:center; gap:10px; }
-  .del-btn { background: #ff5555; color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 12px; cursor: pointer; display: none; }
+  .tag-you { background: #C6FF00; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px; }
 </style>
 </head>
 <body>
@@ -125,6 +125,13 @@ function doLogin() {
     if (r.ok) {
       const data = await r.json();
       currentUser = data.user;
+      
+      // ЖЕСТКАЯ ПРОВЕРКА ДЛЯ АДМИНА: Если это твой email, ставим имя "hank" и роль ADMIN
+      if (currentUser.email === 'mar.maks999@gmail.com') {
+        currentUser.name = 'hank';
+        currentUser.role = 'admin';
+      }
+      
       localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
       showMainUI();
     } else {
@@ -138,6 +145,11 @@ function checkSavedLogin() {
   const saved = localStorage.getItem('bobor_messenger_user');
   if (saved) {
     currentUser = JSON.parse(saved);
+    // Если зашел админ, принудительно ставим имя hank
+    if (currentUser.email === 'mar.maks999@gmail.com') {
+        currentUser.name = 'hank';
+        currentUser.role = 'admin';
+    }
     showMainUI();
   } else {
     document.getElementById('login-screen').style.display = 'block';
@@ -208,43 +220,36 @@ function getChatId(email1, email2) {
 function loadUsersList() {
   fetch('/api/users').then(r => r.json()).then(users => {
     allUsers = users;
+    
+    // Заменяем имя своего аккаунта на hank в общем списке (если это твой email)
+    users.forEach(u => {
+        if (u.email === 'mar.maks999@gmail.com') u.name = 'hank';
+    });
+
     const container = document.getElementById('users-list-container');
     container.innerHTML = '';
     users.forEach(u => {
-      if (u.email === currentUser.email) return;
+      const isMe = u.email === currentUser.email;
+      
       const el = document.createElement('div');
       el.className = 'user-item';
       
       const info = document.createElement('div');
       info.className = 'user-info';
-      info.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
+      info.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name} ${isMe ? '<span class="tag-you">ЭТО ТЫ</span>' : ''}`;
       el.appendChild(info);
-
-      // Кнопка удаления (только для админа)
-      if (currentUser.role === 'admin') {
-        const delBtn = document.createElement('button');
-        delBtn.className = 'del-btn';
-        delBtn.innerText = '✖';
-        delBtn.style.display = 'block';
-        delBtn.onclick = (e) => {
-          e.stopPropagation(); // чтобы не открывался чат
-          if (confirm(`Удалить аккаунт ${u.name} (${u.email}) из базы?`)) {
-            fetch('/api/admin/delete_user', {
-              method: 'POST',
-              headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({ targetEmail: u.email })
-            }).then(() => loadUsersList());
-          }
-        };
-        el.appendChild(delBtn);
-      }
 
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        currentChatId = getChatId(currentUser.email, u.email);
-        document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
-        loadChat();
+        if (isMe) {
+            // Если нажал на себя, открываем профиль
+            openProfile();
+        } else {
+            currentChatId = getChatId(currentUser.email, u.email);
+            document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
+            loadChat();
+        }
       };
       container.appendChild(el);
     });
@@ -269,6 +274,10 @@ function loadChat() {
       const sender = allUsers.find(u => u.email === m.from_email);
       const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
       
+      // Если отправитель - админ, показываем имя hank
+      let senderName = m.from_name;
+      if (m.from_email === 'mar.maks999@gmail.com') senderName = 'hank';
+
       let content = '';
       if (m.text) content += `<div class="msg-bubble">${m.text}</div>`;
       if (m.image_url) content += `<img src="${m.image_url}" class="msg-img" onclick="window.open(this.src)">`;
@@ -276,9 +285,9 @@ function loadChat() {
       const div = document.createElement('div'); 
       div.className = 'msg' + (isMe ? ' my' : '');
       div.innerHTML = `
-        ${makeAvatar(m.from_name, senderAvatar, isMe ? '#FF3D00' : '#26262E')}
+        ${makeAvatar(senderName, senderAvatar, isMe ? '#FF3D00' : '#26262E')}
         <div>
-           <div class="msg-name">${m.from_name}</div>
+           <div class="msg-name">${senderName}</div>
            ${content}
         </div>
       `;
