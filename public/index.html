@@ -37,24 +37,34 @@
   .login-box { max-width: 400px; margin: 50px auto; }
   
   #profile-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
-  #profile-modal .card { width: 300px; }
+  #profile-modal .card { width: 300px; text-align: center;}
   
   .header-actions { display:flex; align-items:center; gap:10px; }
   .tag-you { background: #C6FF00; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px; }
+  
+  .big-avatar { width: 100px; height: 100px; font-size: 40px; margin: 0 auto 15px; cursor: pointer; position: relative;}
+  .big-avatar:hover::after { content: "Изменить"; position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.7); font-size: 12px; padding: 4px; border-radius: 0 0 50px 50px; color: #fff;}
 </style>
 </head>
 <body>
 <div class="wrap">
   
+  <!-- МОДАЛКА ПРОФИЛЯ -->
   <div id="profile-modal">
     <div class="card">
       <h3 style="margin-top:0">Мой профиль</h3>
-      <div class="form-group">
-        <label>Ссылка на фото (URL)</label>
-        <input type="text" id="avatar-url-input" placeholder="https://.../photo.jpg">
+      
+      <input type="file" id="avatar-file" accept="image/*" onchange="uploadAvatar(this)" style="display:none">
+      <div class="avatar big-avatar" id="modal-avatar" onclick="document.getElementById('avatar-file').click()"></div>
+      <p style="font-size:12px; color:#8A8A93; margin-bottom: 20px;">Нажми на фото, чтобы изменить</p>
+
+      <div class="form-group" style="text-align: left;">
+        <label>Твоё имя</label>
+        <input type="text" id="custom-name-input" placeholder="Как тебя видят другие?">
       </div>
-      <button class="btn" onclick="saveAvatar()">Сохранить</button>
-      <button class="btn btn-outline" onclick="document.getElementById('profile-modal').style.display='none'">Отмена</button>
+      
+      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="saveProfile()">Сохранить</button>
+      <button class="btn btn-outline" style="width:100%;" onclick="document.getElementById('profile-modal').style.display='none'">Отмена</button>
     </div>
   </div>
 
@@ -111,6 +121,7 @@
 let currentUser = null;
 let currentChatId = 'general';
 let allUsers = [];
+let pendingAvatarBase64 = ''; // Для хранения временной аватарки перед сохранением
 
 function doLogin() {
   const email = document.getElementById('log-email').value;
@@ -125,13 +136,6 @@ function doLogin() {
     if (r.ok) {
       const data = await r.json();
       currentUser = data.user;
-      
-      // ЖЕСТКАЯ ПРОВЕРКА ДЛЯ АДМИНА: Если это твой email, ставим имя "hank" и роль ADMIN
-      if (currentUser.email === 'mar.maks999@gmail.com') {
-        currentUser.name = 'hank';
-        currentUser.role = 'admin';
-      }
-      
       localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
       showMainUI();
     } else {
@@ -145,11 +149,6 @@ function checkSavedLogin() {
   const saved = localStorage.getItem('bobor_messenger_user');
   if (saved) {
     currentUser = JSON.parse(saved);
-    // Если зашел админ, принудительно ставим имя hank
-    if (currentUser.email === 'mar.maks999@gmail.com') {
-        currentUser.name = 'hank';
-        currentUser.role = 'admin';
-    }
     showMainUI();
   } else {
     document.getElementById('login-screen').style.display = 'block';
@@ -165,7 +164,7 @@ function showMainUI() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-ui').style.display = 'block';
   
-  updateMyAvatar();
+  updateMyAvatarUI();
   loadUsersList();
   loadChat();
   
@@ -175,7 +174,7 @@ function showMainUI() {
   }, 2000);
 }
 
-function updateMyAvatar() {
+function updateMyAvatarUI() {
   const av = document.getElementById('my-avatar');
   if (currentUser.avatar) {
     av.style.backgroundImage = `url(${currentUser.avatar})`;
@@ -192,27 +191,76 @@ function makeAvatar(name, avatarUrl, bgColor) {
   return `<div class="avatar" style="background:${bgColor}">${name[0].toUpperCase()}</div>`;
 }
 
+// === ПРОФИЛЬ ===
 function openProfile() {
-  document.getElementById('avatar-url-input').value = currentUser.avatar || '';
+  document.getElementById('custom-name-input').value = currentUser.name;
+  pendingAvatarBase64 = currentUser.avatar || ''; // сбрасываем на текущую
+  
+  const av = document.getElementById('modal-avatar');
+  if (currentUser.avatar) {
+    av.style.backgroundImage = `url(${currentUser.avatar})`;
+    av.innerText = '';
+  } else {
+    av.style.backgroundImage = 'none';
+    av.innerText = currentUser.name[0].toUpperCase();
+  }
+  
   document.getElementById('profile-modal').style.display = 'flex';
 }
 
-function saveAvatar() {
-  const url = document.getElementById('avatar-url-input').value;
-  fetch('/api/profile/avatar', {
+function uploadAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 200; // Маленький размер для аватарки
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > MAX_WIDTH) {
+        height = Math.round((height * MAX_WIDTH) / width);
+        width = MAX_WIDTH;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      
+      pendingAvatarBase64 = canvas.toDataURL('image/jpeg', 0.8);
+      
+      const av = document.getElementById('modal-avatar');
+      av.style.backgroundImage = `url(${pendingAvatarBase64})`;
+      av.innerText = '';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveProfile() {
+  const newName = document.getElementById('custom-name-input').value;
+  if (!newName.trim()) return alert('Имя не может быть пустым');
+
+  fetch('/api/profile/save', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email: currentUser.email, avatar_url: url })
+    body: JSON.stringify({ email: currentUser.email, avatar_url: pendingAvatarBase64, custom_name: newName })
   }).then(() => {
-    currentUser.avatar = url;
+    currentUser.name = newName;
+    currentUser.avatar = pendingAvatarBase64;
     localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
-    updateMyAvatar();
+    updateMyAvatarUI();
     document.getElementById('profile-modal').style.display = 'none';
     loadChat();
     loadUsersList();
   });
 }
 
+// === СПИСОК ЧАТОВ ===
 function getChatId(email1, email2) {
   return email1.replace(/[@.]/g, '_') + '___' + email2.replace(/[@.]/g, '_');
 }
@@ -220,14 +268,9 @@ function getChatId(email1, email2) {
 function loadUsersList() {
   fetch('/api/users').then(r => r.json()).then(users => {
     allUsers = users;
-    
-    // Заменяем имя своего аккаунта на hank в общем списке (если это твой email)
-    users.forEach(u => {
-        if (u.email === 'mar.maks999@gmail.com') u.name = 'hank';
-    });
-
     const container = document.getElementById('users-list-container');
     container.innerHTML = '';
+    
     users.forEach(u => {
       const isMe = u.email === currentUser.email;
       
@@ -236,20 +279,18 @@ function loadUsersList() {
       
       const info = document.createElement('div');
       info.className = 'user-info';
-      info.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name} ${isMe ? '<span class="tag-you">ЭТО ТЫ</span>' : ''}`;
+      info.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name} ${isMe ? '<span class="tag-you">ТЫ</span>' : ''}`;
       el.appendChild(info);
 
       el.onclick = () => {
+        // Если это ты сам - ничего не делаем (редактирование только по кнопке сверху)
+        if (isMe) return; 
+
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        if (isMe) {
-            // Если нажал на себя, открываем профиль
-            openProfile();
-        } else {
-            currentChatId = getChatId(currentUser.email, u.email);
-            document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
-            loadChat();
-        }
+        currentChatId = getChatId(currentUser.email, u.email);
+        document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
+        loadChat();
       };
       container.appendChild(el);
     });
@@ -272,11 +313,10 @@ function loadChat() {
     data.forEach(m => {
       const isMe = m.from_email === currentUser.email;
       const sender = allUsers.find(u => u.email === m.from_email);
-      const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
       
-      // Если отправитель - админ, показываем имя hank
-      let senderName = m.from_name;
-      if (m.from_email === 'mar.maks999@gmail.com') senderName = 'hank';
+      // Если отправитель - ты, берем твою свежую аву. Если другой - его.
+      const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
+      const senderName = isMe ? currentUser.name : (sender ? sender.name : m.from_name);
 
       let content = '';
       if (m.text) content += `<div class="msg-bubble">${m.text}</div>`;
@@ -359,8 +399,7 @@ function uploadPhoto(input) {
       
       canvas.width = width;
       canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
       
       const base64 = canvas.toDataURL('image/jpeg', 0.6);
       
