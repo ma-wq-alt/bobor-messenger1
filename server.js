@@ -12,57 +12,63 @@ const TURSO_URL = process.env.TURSO_URL;
 const TURSO_TOKEN = process.env.TURSO_TOKEN;
 const db = (TURSO_URL && TURSO_TOKEN) ? createClient({ url: TURSO_URL, authToken: TURSO_TOKEN }) : null;
 
-const ADMIN_PASSWORD = 'тсб';
-
 async function initDB() {
-  if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
+  if (!db) return console.log('⚠️ НЕТ БАЗЫ! Проверь TURSO_URL и TURSO_TOKEN');
   try {
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, 
-        chat_id TEXT, 
-        from_email TEXT, 
-        from_name TEXT, 
-        text TEXT, 
-        date TEXT
-      )
-    `);
-    console.log('✅ База чата готова');
-  } catch (e) { console.error('Ошибка базы:', e.message); }
+    await db.batch([
+      `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT, from_email TEXT, from_name TEXT, text TEXT, image_url TEXT, date TEXT)`,
+      `CREATE TABLE IF NOT EXISTS profiles (email TEXT PRIMARY KEY, avatar_url TEXT)`
+    ]);
+    try { await db.execute('ALTER TABLE messages ADD COLUMN image_url TEXT'); } catch(e) {}
+    console.log('✅ База готова (чат и профили)');
+  } catch (e) { console.error('❌ Ошибка базы:', e.message); }
 }
 
-// Вход через банк
+// --- ВХОД ---
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-  
-  // Вход для Админа
-  if (password === ADMIN_PASSWORD) {
-    return res.json({ success: true, user: { name: 'Админ', email: 'admin@bobor.ru', role: 'admin' } });
-  }
-
   if (!db) return res.status(500).json({ error: 'Нет подключения к базе' });
   
   try {
+    // 1. Проверяем пользователя в базе банка
     const u = await db.execute({ sql: 'SELECT email, name, display_name, pwd FROM users WHERE email = ?', args: [email] });
+    
     if (u.rows.length === 0) return res.status(401).json({ error: 'Аккаунт не найден в банке' });
     
+    // Проверяем пароль (в базе банка он хранится в колонке pwd)
     if (u.rows[0].pwd !== password) return res.status(401).json({ error: 'Неверный пароль' });
     
     const name = u.rows[0].display_name || u.rows[0].name;
-    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: 'user' } });
+    const profile = await db.execute({ sql: 'SELECT avatar_url FROM profiles WHERE email = ?', args: [u.rows[0].email] });
+    const avatar = profile.rows.length > 0 ? profile.rows[0].avatar_url : '';
+
+    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: 'user', avatar } });
   } catch (e) {
     res.status(500).json({ error: 'Ошибка базы: ' + e.message });
   }
 });
 
-// Список всех людей (чтобы было с кем переписываться)
+// Список людей (с аватарками)
 app.get('/api/users', async (req, res) => {
   if (!db) return res.json([]);
   try {
-    const r = await db.execute('SELECT email, name, display_name FROM users');
-    const users = r.rows.map(u => ({ email: u.email, name: u.display_name || u.name }));
+    const r = await db.execute('SELECT users.email, users.name, users.display_name, profiles.avatar_url FROM users LEFT JOIN profiles ON users.email = profiles.email');
+    const users = r.rows.map(u => ({ email: u.email, name: u.display_name || u.name, avatar: u.avatar_url || '' }));
     res.json(users);
   } catch(e) { res.json([]); }
+});
+
+// Аватарка
+app.post('/api/profile/avatar', async (req, res) => {
+  const { email, avatar_url } = req.body;
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
+  try {
+    await db.execute({ 
+      sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, 
+      args: [email, avatar_url, avatar_url] 
+    });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Сообщения
@@ -75,18 +81,22 @@ app.get('/api/messages/:chat_id', async (req, res) => {
 });
 
 app.post('/api/messages', async (req, res) => {
-  const { chat_id, from_email, from_name, text } = req.body;
+  const { chat_id, from_email, from_name, text, image_url } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
+  
+  if (!text && !image_url) return res.status(400).json({ error: 'Пустое сообщение' });
+
   try {
     await db.execute({ 
-      sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, date) VALUES (?, ?, ?, ?, ?)', 
-      args: [chat_id, from_email, from_name, text, new Date().toLocaleString('ru-RU')] 
+      sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', 
+      args: [chat_id, from_email, from_name, text || '', image_url || '', new Date().toLocaleString('ru-RU')] 
     });
     res.json({ success: true });
   } catch (e) { 
+    console.error('Ошибка записи:', e.message);
     res.status(500).json({ error: e.message }); 
   }
 });
 
 const PORT = process.env.PORT || 3000;
-initDB().then(() => app.listen(PORT, () => console.log(`💬 BOBOR MESSENGER на :${PORT}`)));
+initDB().then(() => app.listen(PORT, () => console.log(`💬 MESSENGER на :${PORT}`)));
