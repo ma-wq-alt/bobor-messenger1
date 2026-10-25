@@ -92,10 +92,9 @@
         <div style="margin-bottom:15px; font-weight:bold; font-size:18px; color:#fff;" id="chat-header">Общий чат</div>
         <div class="chat-messages" id="chat-messages"></div>
         
-        <div style="display:flex; gap:10px; align-items:center">
+        <div id="chat-input-area" style="display:flex; gap:10px; align-items:center">
           <input type="file" id="file-input" accept="image/*" onchange="uploadPhoto(this)" style="display:none">
           <label for="file-input" class="btn" style="background:#26262E; padding:10px; cursor:pointer; margin:0" title="Отправить фото">📷</label>
-          
           <input type="text" id="chat-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter') sendMsg()">
           <button class="btn" onclick="sendMsg()">➤</button>
         </div>
@@ -224,6 +223,15 @@ function selectChat(id, name, el) {
   el.classList.add('active');
   currentChatId = id;
   document.getElementById('chat-header').innerText = name;
+  
+  // Скрываем поле ввода, если это новости и мы не админ
+  const inputArea = document.getElementById('chat-input-area');
+  if (id === 'news_channel' && currentUser.role !== 'admin') {
+    inputArea.style.display = 'none';
+  } else {
+    inputArea.style.display = 'flex';
+  }
+  
   loadChat();
 }
 
@@ -235,8 +243,10 @@ function loadChat() {
     data.forEach(m => {
       const isMe = m.from_email === currentUser.email;
       const sender = allUsers.find(u => u.email === m.from_email);
-      const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
-      const senderName = isMe ? currentUser.name : (sender ? sender.name : m.from_name);
+      
+      // Если отправитель не найден в списке пользователей (например, старый), берем данные из сообщения
+      const senderAvatar = sender ? sender.avatar : '';
+      const senderName = sender ? sender.name : m.from_name;
       
       let content = '';
       if (m.text) content += `<div class="msg-bubble">${m.text}</div>`;
@@ -266,7 +276,10 @@ function sendMsg() {
     method: 'POST', 
     headers: {'Content-Type': 'application/json'}, 
     body: JSON.stringify({ chat_id: currentChatId, from_email: currentUser.email, from_name: currentUser.name, text: text }) 
-  }).then(() => { input.value = ''; loadChat(); });
+  }).then(async r => {
+    if(r.ok) { input.value = ''; loadChat(); }
+    else { const e = await r.json(); alert(e.error); }
+  });
 }
 
 function uploadPhoto(input) {
@@ -298,7 +311,7 @@ function uploadPhoto(input) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
       
-      const base64 = canvas.toDataURL('image/jpeg', 0.4); // Сжимаем на 60%
+      const base64 = canvas.toDataURL('image/jpeg', 0.4); 
       
       fetch('/api/messages', { 
         method: 'POST', 
