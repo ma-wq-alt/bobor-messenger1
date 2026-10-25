@@ -66,8 +66,9 @@
     <div class="header">
       <h1>💬 BOBOR MESSENGER</h1>
       <div style="display:flex;align-items:center;gap:10px">
-        <div class="avatar" id="my-avatar" onclick="openProfile()" title="Изменить аватарку" style="cursor:pointer"></div>
-        <b id="my-name" onclick="openProfile()" style="cursor:pointer">Имя</b>
+        <!-- Кнопка профиля теперь явная -->
+        <button class="btn btn-outline" onclick="openProfile()">⚙️ Профиль</button>
+        <b id="my-name"></b>
         <button class="btn" onclick="logout()">Выйти</button>
       </div>
     </div>
@@ -119,7 +120,6 @@ function doLogin() {
     if (r.ok) {
       const data = await r.json();
       currentUser = data.user;
-      // Принудительно делаем email в нижнем регистре для надежности
       currentUser.email = currentUser.email.toLowerCase();
       localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
       showMainUI();
@@ -150,7 +150,8 @@ function showMainUI() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-ui').style.display = 'block';
   
-  updateMyAvatar();
+  document.getElementById('my-name').innerText = currentUser.name;
+  
   loadUsersList();
   loadChat();
   
@@ -158,23 +159,6 @@ function showMainUI() {
     loadChat(); 
     loadUsersList(); 
   }, 2000);
-}
-
-function updateMyAvatar() {
-  const av = document.getElementById('my-avatar');
-  if (currentUser.avatar) {
-    av.style.backgroundImage = `url('${currentUser.avatar}')`;
-    av.innerText = '';
-  } else {
-    av.style.backgroundImage = 'none';
-    av.innerText = currentUser.name[0].toUpperCase();
-  }
-  document.getElementById('my-name').innerText = currentUser.name;
-}
-
-function makeAvatar(name, avatarUrl, bgColor) {
-  if (avatarUrl) return `<div class="avatar" style="background-image:url('${avatarUrl}')"></div>`;
-  return `<div class="avatar" style="background:${bgColor}">${name[0].toUpperCase()}</div>`;
 }
 
 function openProfile() {
@@ -191,11 +175,15 @@ function saveAvatar() {
   }).then(() => {
     currentUser.avatar = url;
     localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
-    updateMyAvatar();
     document.getElementById('profile-modal').style.display = 'none';
     loadChat();
     loadUsersList();
   });
+}
+
+function makeAvatar(name, avatarUrl, bgColor) {
+  if (avatarUrl) return `<div class="avatar" style="background-image:url('${avatarUrl}')"></div>`;
+  return `<div class="avatar" style="background:${bgColor}">${(name||'?')[0].toUpperCase()}</div>`;
 }
 
 function loadUsersList() {
@@ -203,17 +191,17 @@ function loadUsersList() {
     allUsers = users;
     const container = document.getElementById('users-list-container');
     container.innerHTML = '';
-    users.forEach(u => {
-      // ИСПРАВЛЕНИЕ БАГА: Сравниваем email в нижнем регистре, чтобы себя не показывало
-      if (u.email.toLowerCase() === currentUser.email.toLowerCase()) return; 
-      
+    
+    // Фильтруем себя жестко по email
+    const others = users.filter(u => u.email.toLowerCase() !== currentUser.email.toLowerCase());
+    
+    others.forEach(u => {
       const el = document.createElement('div');
       el.className = 'user-item';
       el.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        // Делаем ID чата тоже в нижнем регистре, чтобы всегда совпадало
         currentChatId = [currentUser.email.toLowerCase(), u.email.toLowerCase()].sort().join('_');
         document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
         loadChat();
@@ -237,7 +225,6 @@ function loadChat() {
     const box = document.getElementById('chat-messages');
     box.innerHTML = '';
     data.forEach(m => {
-      // ИСПРАВЛЕНИЕ: Сравниваем отправителя с тобой в нижнем регистре
       const isMe = m.from_email.toLowerCase() === currentUser.email.toLowerCase();
       const sender = allUsers.find(u => u.email.toLowerCase() === m.from_email.toLowerCase());
       const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
