@@ -8,7 +8,8 @@
   body{background:#0B0B0F;color:#fff;font-family:Arial,sans-serif;margin:0;padding:20px}
   .wrap{max-width:900px;margin:0 auto}
   .card{background:#15151B;border:1px solid #26262E;border-radius:12px;padding:20px;margin-bottom:15px}
-  .btn{background:#FF3D00;color:#fff;border:0;padding:10px 15px;border-radius:8px;font-weight:bold;cursor:pointer;font-family:inherit; display:inline-block; text-align:center;}
+  .btn{background:#FF3D00;color:#fff;border:0;padding:10px 15px;border-radius:8px;font-weight:bold;cursor:pointer;font-family:inherit; transition: 0.2s;}
+  .btn:hover{opacity:0.8}
   .btn-outline{background:transparent;border:1px solid #FF3D00;color:#FF3D00;}
   .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;}
   .form-group { margin-bottom: 12px; }
@@ -18,7 +19,7 @@
   
   .chat-container { display: flex; gap: 10px; height: 600px; }
   .chat-sidebar { width: 250px; background: #000; border: 1px solid #26262E; border-radius: 10px; overflow-y: auto; padding: 10px; }
-  .chat-sidebar .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-radius: 8px; margin-bottom: 5px; color: #8A8A93; }
+  .chat-sidebar .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-radius: 8px; margin-bottom: 5px; color: #8A8A93; transition: 0.2s;}
   .chat-sidebar .user-item:hover { background: #1a1a1a; }
   .chat-sidebar .user-item.active { background: rgba(255,61,0,.15); color: #FF3D00; }
   
@@ -33,34 +34,25 @@
   .msg-name { font-size: 11px; color: #8A8A93; margin-bottom: 4px; }
   .msg-img { max-width: 100%; border-radius: 8px; margin-top: 5px; cursor: pointer; max-height: 300px; object-fit: cover;}
   .login-box { max-width: 400px; margin: 50px auto; }
-  #profile-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
-  #profile-modal .card { width: 350px; }
   
-  /* Скрываем стандартные инпуты для файлов */
-  input[type="file"] { display: none; }
+  #profile-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
+  #profile-modal .card { width: 300px; }
+  
+  .header-actions { display:flex; align-items:center; gap:10px; }
 </style>
 </head>
 <body>
 <div class="wrap">
   
-  <!-- Модалка профиля -->
   <div id="profile-modal">
     <div class="card">
-      <h3 style="margin-top:0">Настройки профиля</h3>
-      
-      <div style="text-align:center; margin-bottom:15px;">
-        <div class="avatar" id="modal-avatar-preview" style="width:80px;height:80px;font-size:32px;margin:0 auto 10px;"></div>
-        <label for="avatar-file-input" class="btn btn-outline" style="font-size:13px; padding:8px 12px; cursor:pointer;">Загрузить фото с устройства</label>
-        <input type="file" id="avatar-file-input" accept="image/*" onchange="uploadAvatar(this)">
-      </div>
-
+      <h3 style="margin-top:0">Мой профиль</h3>
       <div class="form-group">
-        <label>Ваше имя (Ник)</label>
-        <input type="text" id="profile-name-input" placeholder="Например: Макс">
+        <label>Ссылка на фото (URL)</label>
+        <input type="text" id="avatar-url-input" placeholder="https://.../photo.jpg">
       </div>
-      
-      <button class="btn" style="width:100%; margin-bottom:10px;" onclick="saveProfile()">Сохранить</button>
-      <button class="btn btn-outline" style="width:100%;" onclick="document.getElementById('profile-modal').style.display='none'">Отмена</button>
+      <button class="btn" onclick="saveAvatar()">Сохранить</button>
+      <button class="btn btn-outline" onclick="document.getElementById('profile-modal').style.display='none'">Отмена</button>
     </div>
   </div>
 
@@ -75,10 +67,10 @@
   <div id="main-ui" style="display:none">
     <div class="header">
       <h1>💬 BOBOR MESSENGER</h1>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div class="avatar" id="my-avatar" onclick="openProfile()" style="cursor:pointer"></div>
+      <div class="header-actions">
+        <div class="avatar" id="my-avatar" onclick="openProfile()" title="Изменить аватарку" style="cursor:pointer"></div>
         <b id="my-name" onclick="openProfile()" style="cursor:pointer; margin-right:10px;"></b>
-        <button class="btn" style="background:#26262E" onclick="location.reload()">🔄</button>
+        <button class="btn" style="background:#26262E" onclick="location.reload()">🔄 Обновить</button>
         <button class="btn" onclick="logout()">Выйти</button>
       </div>
     </div>
@@ -100,9 +92,10 @@
         <div style="margin-bottom:15px; font-weight:bold; font-size:18px; color:#fff;" id="chat-header">Общий чат</div>
         <div class="chat-messages" id="chat-messages"></div>
         
-        <div id="chat-input-area" style="display:flex; gap:10px; align-items:center">
-          <label for="photo-input" class="btn" style="background:#26262E; padding:10px; cursor:pointer; margin:0" title="Отправить фото">📷</label>
-          <input type="file" id="photo-input" accept="image/*" onchange="uploadPhoto(this)">
+        <div style="display:flex; gap:10px; align-items:center">
+          <input type="file" id="file-input" accept="image/*" onchange="uploadPhoto(this)" style="display:none">
+          <label for="file-input" class="btn" style="background:#26262E; padding:10px; cursor:pointer; margin:0" title="Отправить фото с устройства">📷</label>
+          <button class="btn" style="background:#26262E; padding:10px" onclick="sendPhotoLink()" title="Отправить фото по ссылке">🔗</button>
           
           <input type="text" id="chat-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter') sendMsg()">
           <button class="btn" onclick="sendMsg()">➤</button>
@@ -116,7 +109,6 @@
 let currentUser = null;
 let currentChatId = 'general';
 let allUsers = [];
-let tempAvatarBase64 = null; // Временное хранение новой аватарки
 
 function doLogin() {
   const email = document.getElementById('log-email').value;
@@ -137,7 +129,7 @@ function doLogin() {
       const err = await r.json();
       alert(err.error || 'Ошибка входа');
     }
-  });
+  }).catch(() => alert('Сервер не отвечает. Возможно, он спит. Подождите минуту и попробуйте снова.'));
 }
 
 function checkSavedLogin() {
@@ -158,10 +150,15 @@ function logout() {
 function showMainUI() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-ui').style.display = 'block';
+  
   updateMyAvatar();
   loadUsersList();
   loadChat();
-  setInterval(() => { loadChat(); loadUsersList(); }, 2000);
+  
+  setInterval(() => { 
+    loadChat(); 
+    loadUsersList(); 
+  }, 2000);
 }
 
 function updateMyAvatar() {
@@ -182,79 +179,29 @@ function makeAvatar(name, avatarUrl, bgColor) {
 }
 
 function openProfile() {
-  tempAvatarBase64 = currentUser.avatar || null;
-  const preview = document.getElementById('modal-avatar-preview');
-  
-  if (tempAvatarBase64) {
-    preview.style.backgroundImage = `url(${tempAvatarBase64})`;
-    preview.innerText = '';
-  } else {
-    preview.style.backgroundImage = 'none';
-    preview.innerText = currentUser.name[0].toUpperCase();
-  }
-
-  document.getElementById('profile-name-input').value = currentUser.name || '';
+  document.getElementById('avatar-url-input').value = currentUser.avatar || '';
   document.getElementById('profile-modal').style.display = 'flex';
 }
 
-// СЖАТИЕ И ЗАГРУЗКА АВАТАРКИ
-function uploadAvatar(input) {
-  const file = input.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const img = new Image();
-    img.onload = function() {
-      const canvas = document.createElement('canvas');
-      const MAX_SIZE = 150; // Делаем аватарку маленькой (150x150)
-      let width = img.width;
-      let height = img.height;
-      
-      // Обрезаем в квадрат
-      if (width > height) {
-        const diff = width - height;
-        img.width = height;
-        img.height = height;
-        canvas.width = MAX_SIZE;
-        canvas.height = MAX_SIZE;
-        canvas.getContext('2d').drawImage(img, -diff/2, 0, img.width, img.height, 0, 0, MAX_SIZE, MAX_SIZE);
-      } else {
-        const diff = height - width;
-        img.height = width;
-        canvas.width = MAX_SIZE;
-        canvas.height = MAX_SIZE;
-        canvas.getContext('2d').drawImage(img, 0, -diff/2, img.width, img.height, 0, 0, MAX_SIZE, MAX_SIZE);
-      }
-      
-      tempAvatarBase64 = canvas.toDataURL('image/jpeg', 0.7); // Легкая картинка
-      
-      const preview = document.getElementById('modal-avatar-preview');
-      preview.style.backgroundImage = `url(${tempAvatarBase64})`;
-      preview.innerText = '';
-      input.value = '';
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function saveProfile() {
-  const name = document.getElementById('profile-name-input').value;
-  
-  fetch('/api/profile', {
+function saveAvatar() {
+  const url = document.getElementById('avatar-url-input').value;
+  fetch('/api/profile/avatar', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email: currentUser.email, avatar_url: tempAvatarBase64, custom_name: name })
+    body: JSON.stringify({ email: currentUser.email, avatar_url: url })
   }).then(() => {
-    currentUser.avatar = tempAvatarBase64;
-    currentUser.name = name;
+    currentUser.avatar = url;
     localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
     updateMyAvatar();
     document.getElementById('profile-modal').style.display = 'none';
     loadChat();
     loadUsersList();
   });
+}
+
+// Уникальный и безопасный ID для личного чата
+function getChatId(email1, email2) {
+  return [email1, email2].sort().join('---').replace(/[@.]/g, '_');
 }
 
 function loadUsersList() {
@@ -270,7 +217,7 @@ function loadUsersList() {
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        currentChatId = [currentUser.email, u.email].sort().join('_');
+        currentChatId = getChatId(currentUser.email, u.email);
         document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
         loadChat();
       };
@@ -284,14 +231,6 @@ function selectChat(id, name, el) {
   el.classList.add('active');
   currentChatId = id;
   document.getElementById('chat-header').innerText = name;
-  
-  const inputArea = document.getElementById('chat-input-area');
-  if (id === 'news_channel' && currentUser.role !== 'admin') {
-    inputArea.style.display = 'none';
-  } else {
-    inputArea.style.display = 'flex';
-  }
-  
   loadChat();
 }
 
@@ -303,9 +242,7 @@ function loadChat() {
     data.forEach(m => {
       const isMe = m.from_email === currentUser.email;
       const sender = allUsers.find(u => u.email === m.from_email);
-      
-      const senderAvatar = sender ? sender.avatar : '';
-      const senderName = sender ? sender.name : m.from_name;
+      const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
       
       let content = '';
       if (m.text) content += `<div class="msg-bubble">${m.text}</div>`;
@@ -314,9 +251,9 @@ function loadChat() {
       const div = document.createElement('div'); 
       div.className = 'msg' + (isMe ? ' my' : '');
       div.innerHTML = `
-        ${makeAvatar(senderName, senderAvatar, isMe ? '#FF3D00' : '#26262E')}
+        ${makeAvatar(m.from_name, senderAvatar, isMe ? '#FF3D00' : '#26262E')}
         <div>
-           <div class="msg-name">${senderName}</div>
+           <div class="msg-name">${m.from_name}</div>
            ${content}
         </div>
       `;
@@ -334,20 +271,40 @@ function sendMsg() {
   fetch('/api/messages', { 
     method: 'POST', 
     headers: {'Content-Type': 'application/json'}, 
-    body: JSON.stringify({ chat_id: currentChatId, from_email: currentUser.email, from_name: currentUser.name, text: text }) 
+    body: JSON.stringify({ 
+      chat_id: currentChatId, 
+      from_email: currentUser.email, 
+      from_name: currentUser.name, 
+      text: text 
+    }) 
   }).then(async r => {
-    if(r.ok) { input.value = ''; loadChat(); }
-    else { const e = await r.json(); alert(e.error); }
-  });
+    if(!r.ok) { const e = await r.json(); alert('Ошибка: ' + e.error); }
+    else { input.value = ''; loadChat(); }
+  }).catch(() => alert('Сеть недоступна'));
 }
 
-// СЖАТИЕ И ОТПРАВКА ФОТО В ЧАТ
+function sendPhotoLink() {
+  const url = prompt('Вставьте ссылку на картинку (URL):');
+  if (!url) return;
+  
+  fetch('/api/messages', { 
+    method: 'POST', 
+    headers: {'Content-Type': 'application/json'}, 
+    body: JSON.stringify({ 
+      chat_id: currentChatId, 
+      from_email: currentUser.email, 
+      from_name: currentUser.name, 
+      image_url: url 
+    }) 
+  }).then(() => { loadChat(); });
+}
+
 function uploadPhoto(input) {
   const file = input.files[0];
   if (!file) return;
   
-  if (file.size > 5 * 1024 * 1024) {
-    alert('Фото слишком большое (макс 5 МБ).');
+  if (file.size > 2 * 1024 * 1024) {
+    alert('Фото слишком большое (макс 2 МБ). Сожми или используй 🔗.');
     input.value = '';
     return;
   }
@@ -357,7 +314,7 @@ function uploadPhoto(input) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 500; 
+      const MAX_WIDTH = 600;
       let width = img.width;
       let height = img.height;
       
@@ -371,14 +328,19 @@ function uploadPhoto(input) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
       
-      const base64 = canvas.toDataURL('image/jpeg', 0.4); 
+      const base64 = canvas.toDataURL('image/jpeg', 0.6);
       
       fetch('/api/messages', { 
         method: 'POST', 
         headers: {'Content-Type': 'application/json'}, 
-        body: JSON.stringify({ chat_id: currentChatId, from_email: currentUser.email, from_name: currentUser.name, image_data: base64 }) 
+        body: JSON.stringify({ 
+          chat_id: currentChatId, 
+          from_email: currentUser.email, 
+          from_name: currentUser.name, 
+          image_url: base64 
+        }) 
       }).then(async r => { 
-        if(!r.ok) { const err = await r.json(); alert('Ошибка фото: ' + err.error); }
+        if(!r.ok) { const e = await r.json(); alert('Ошибка фото: ' + e.error); }
         else { loadChat(); }
         input.value = ''; 
       });
