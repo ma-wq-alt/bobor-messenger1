@@ -5,7 +5,7 @@ import { createClient } from '@libsql/client';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const TURSO_URL = process.env.TURSO_URL;
@@ -23,10 +23,12 @@ async function initDB() {
   } catch (e) { console.error('❌ Ошибка базы:', e.message); }
 }
 
+// Вход
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
   const cleanEmail = (email || '').trim().toLowerCase();
+  
   try {
     const u = await db.execute({ sql: 'SELECT email, name, display_name, pwd FROM users WHERE LOWER(email) = ?', args: [cleanEmail] });
     if (u.rows.length === 0) return res.status(401).json({ error: 'Аккаунт не найден' });
@@ -40,24 +42,49 @@ app.post('/api/login', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Ошибка' }); }
 });
 
+// Список людей (ФИЛЬТРУЕМ ПО ИМЕНИ)
 app.get('/api/users', async (req, res) => {
+  const myName = req.query.my_name || '';
   if (!db) return res.json([]);
+  
   try {
     const r = await db.execute('SELECT users.email, users.name, users.display_name, profiles.avatar_url FROM users LEFT JOIN profiles ON LOWER(users.email) = LOWER(profiles.email)');
-    res.json(r.rows.map(u => ({ email: u.email.toLowerCase(), name: u.display_name || u.name, avatar: u.avatar_url || '' })));
+    
+    const uniqueUsers = [];
+    const seenNames = new Set();
+    
+    r.rows.forEach(u => {
+      const uName = u.display_name || u.name;
+      // Если имя совпадает с твоим — пропускаем (фильтр по имени)
+      if (uName === myName) return; 
+      
+      const uEmail = u.email.toLowerCase();
+      if (seenNames.has(uEmail)) return; // Убираем дубликаты по почте
+      
+      seenNames.add(uEmail);
+      uniqueUsers.push({ 
+        email: uEmail, 
+        name: uName, 
+        avatar: u.avatar_url || '' 
+      });
+    });
+    
+    res.json(uniqueUsers);
   } catch(e) { res.json([]); }
 });
 
+// Аватарка
 app.post('/api/profile/avatar', async (req, res) => {
-  const { email, avatar_url } = req.body;
+  const { email, avatar_data } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
   const cleanEmail = (email || '').trim().toLowerCase();
   try {
-    await db.execute({ sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, args: [cleanEmail, avatar_url, avatar_url] });
+    await db.execute({ sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, args: [cleanEmail, avatar_data, avatar_data] });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Сообщения
 app.get('/api/messages/:chat_id', async (req, res) => {
   if (!db) return res.json([]);
   try {
@@ -69,6 +96,9 @@ app.get('/api/messages/:chat_id', async (req, res) => {
 app.post('/api/messages', async (req, res) => {
   const { chat_id, from_email, from_name, text, image_data } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
+  
+  if (!text && !image_data) return res.status(400).json({ error: 'Пусто' });
+  
   try {
     await db.execute({ 
       sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', 
