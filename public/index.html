@@ -129,7 +129,7 @@ function doLogin() {
       const err = await r.json();
       alert(err.error || 'Ошибка входа');
     }
-  }).catch(() => alert('Сервер не отвечает. Возможно, он спит. Подождите минуту и попробуйте снова.'));
+  }).catch(() => alert('Сервер не отвечает. Подождите минуту.'));
 }
 
 function checkSavedLogin() {
@@ -199,9 +199,10 @@ function saveAvatar() {
   });
 }
 
-// Уникальный и безопасный ID для личного чата
+// ИСПРАВЛЕННЫЙ ID ЛИЧНОГО ЧАТА
 function getChatId(email1, email2) {
-  return [email1, email2].sort().join('---').replace(/[@.]/g, '_');
+  // Просто объединяем два email через подчеркивание (без @ и точек)
+  return email1.replace(/[@.]/g, '_') + '___' + email2.replace(/[@.]/g, '_');
 }
 
 function loadUsersList() {
@@ -217,6 +218,7 @@ function loadUsersList() {
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
+        // ID чата для нас и для собеседника должен быть ОДИНАКОВЫМ
         currentChatId = getChatId(currentUser.email, u.email);
         document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
         loadChat();
@@ -241,6 +243,7 @@ function loadChat() {
     box.innerHTML = '';
     data.forEach(m => {
       const isMe = m.from_email === currentUser.email;
+      // Ищем аватарку отправителя строго по его email
       const sender = allUsers.find(u => u.email === m.from_email);
       const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
       
@@ -304,7 +307,7 @@ function uploadPhoto(input) {
   if (!file) return;
   
   if (file.size > 2 * 1024 * 1024) {
-    alert('Фото слишком большое (макс 2 МБ). Сожми или используй 🔗.');
+    alert('Фото слишком большое (макс 2 МБ).');
     input.value = '';
     return;
   }
