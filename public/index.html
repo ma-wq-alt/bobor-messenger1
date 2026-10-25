@@ -37,6 +37,7 @@
   #profile-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:100;}
   #profile-modal .card { width: 300px; }
   #file-input { display: none; }
+  #avatar-file { display: none; }
 </style>
 </head>
 <body>
@@ -45,12 +46,14 @@
   <div id="profile-modal">
     <div class="card">
       <h3 style="margin-top:0">Мой профиль</h3>
-      <div class="form-group">
-        <label>Ссылка на фото (URL)</label>
-        <input type="text" id="avatar-url-input" placeholder="https://.../photo.jpg">
+      <div style="text-align:center; margin-bottom:15px;">
+        <div class="avatar" id="modal-avatar" style="width:80px; height:80px; margin:0 auto; font-size:30px;"></div>
       </div>
-      <button class="btn" onclick="saveAvatar()">Сохранить</button>
-      <button class="btn btn-outline" onclick="document.getElementById('profile-modal').style.display='none'">Отмена</button>
+      
+      <input type="file" id="avatar-file" accept="image/*" onchange="uploadAvatar(this)">
+      <label for="avatar-file" class="btn" style="width:100%; text-align:center; box-sizing:border-box; display:block; margin-bottom:10px;">📷 Загрузить фото</label>
+      
+      <button class="btn btn-outline" style="width:100%" onclick="document.getElementById('profile-modal').style.display='none'">Закрыть</button>
     </div>
   </div>
 
@@ -66,7 +69,6 @@
     <div class="header">
       <h1>💬 BOBOR MESSENGER</h1>
       <div style="display:flex;align-items:center;gap:10px">
-        <!-- Кнопка профиля теперь явная -->
         <button class="btn btn-outline" onclick="openProfile()">⚙️ Профиль</button>
         <b id="my-name"></b>
         <button class="btn" onclick="logout()">Выйти</button>
@@ -149,36 +151,10 @@ function logout() {
 function showMainUI() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('main-ui').style.display = 'block';
-  
   document.getElementById('my-name').innerText = currentUser.name;
-  
   loadUsersList();
   loadChat();
-  
-  setInterval(() => { 
-    loadChat(); 
-    loadUsersList(); 
-  }, 2000);
-}
-
-function openProfile() {
-  document.getElementById('avatar-url-input').value = currentUser.avatar || '';
-  document.getElementById('profile-modal').style.display = 'flex';
-}
-
-function saveAvatar() {
-  const url = document.getElementById('avatar-url-input').value;
-  fetch('/api/profile/avatar', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ email: currentUser.email, avatar_url: url })
-  }).then(() => {
-    currentUser.avatar = url;
-    localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
-    document.getElementById('profile-modal').style.display = 'none';
-    loadChat();
-    loadUsersList();
-  });
+  setInterval(() => { loadChat(); loadUsersList(); }, 2000);
 }
 
 function makeAvatar(name, avatarUrl, bgColor) {
@@ -186,23 +162,68 @@ function makeAvatar(name, avatarUrl, bgColor) {
   return `<div class="avatar" style="background:${bgColor}">${(name||'?')[0].toUpperCase()}</div>`;
 }
 
+function openProfile() {
+  const av = document.getElementById('modal-avatar');
+  if (currentUser.avatar) {
+    av.style.backgroundImage = `url('${currentUser.avatar}')`;
+    av.innerText = '';
+  } else {
+    av.style.backgroundImage = 'none';
+    av.innerText = currentUser.name[0].toUpperCase();
+  }
+  document.getElementById('profile-modal').style.display = 'flex';
+}
+
+function uploadAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const MAX_SIZE = 200;
+      let width = img.width; let height = img.height;
+      if (width > height) { if (width > MAX_SIZE) { height = Math.round((height * MAX_SIZE) / width); width = MAX_SIZE; } }
+      else { if (height > MAX_SIZE) { width = Math.round((width * MAX_SIZE) / height); height = MAX_SIZE; } }
+      
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+      
+      fetch('/api/profile/avatar', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: currentUser.email, avatar_data: base64 })
+      }).then(() => {
+        currentUser.avatar = base64;
+        localStorage.setItem('bobor_messenger_user', JSON.stringify(currentUser));
+        openProfile();
+        loadChat();
+        loadUsersList();
+      });
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function loadUsersList() {
-  fetch('/api/users').then(r => r.json()).then(users => {
+  // Отправляем имя для фильтрации!
+  fetch('/api/users?my_name=' + encodeURIComponent(currentUser.name)).then(r => r.json()).then(users => {
     allUsers = users;
     const container = document.getElementById('users-list-container');
     container.innerHTML = '';
     
-    // Фильтруем себя жестко по email
-    const others = users.filter(u => u.email.toLowerCase() !== currentUser.email.toLowerCase());
-    
-    others.forEach(u => {
+    users.forEach(u => {
       const el = document.createElement('div');
       el.className = 'user-item';
       el.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        currentChatId = [currentUser.email.toLowerCase(), u.email.toLowerCase()].sort().join('_');
+        currentChatId = [currentUser.email, u.email].sort().join('_');
         document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
         loadChat();
       };
@@ -252,46 +273,42 @@ function sendMsg() {
   const input = document.getElementById('chat-input');
   const text = input.value;
   if(!text.trim() || !currentUser) return;
+  input.value = ''; 
   
   fetch('/api/messages', { 
     method: 'POST', 
     headers: {'Content-Type': 'application/json'}, 
     body: JSON.stringify({ chat_id: currentChatId, from_email: currentUser.email, from_name: currentUser.name, text: text }) 
-  }).then(() => { input.value = ''; loadChat(); });
+  }).then(res => {
+    if(!res.ok) alert('Ошибка при отправке!');
+    loadChat();
+  });
 }
 
 function uploadPhoto(input) {
   const file = input.files[0];
   if (!file) return;
-  
   const reader = new FileReader();
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
       const canvas = document.createElement('canvas');
       const MAX_WIDTH = 800;
-      let width = img.width;
-      let height = img.height;
+      let width = img.width; let height = img.height;
+      if (width > MAX_WIDTH) { height = Math.round((height * MAX_WIDTH) / width); width = MAX_WIDTH; }
       
-      if (width > MAX_WIDTH) {
-        height = Math.round((height * MAX_WIDTH) / width);
-        width = MAX_WIDTH;
-      }
-      
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
-      
       const base64 = canvas.toDataURL('image/jpeg', 0.7);
       
       fetch('/api/messages', { 
         method: 'POST', 
         headers: {'Content-Type': 'application/json'}, 
         body: JSON.stringify({ chat_id: currentChatId, from_email: currentUser.email, from_name: currentUser.name, image_data: base64 }) 
-      }).then(() => { 
-        input.value = ''; 
-        loadChat(); 
+      }).then(res => {
+        if(!res.ok) alert('Ошибка при отправке фото!');
+        input.value = ''; loadChat();
       });
     };
     img.src = e.target.result;
