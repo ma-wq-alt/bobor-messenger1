@@ -15,6 +15,9 @@ const db = (TURSO_URL && TURSO_TOKEN) ? createClient({ url: TURSO_URL, authToken
 async function initDB() {
   if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
   try {
+    try { await db.execute('DROP TABLE IF EXISTS messages'); } catch(e) { console.log('drop err', e); }
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS messages (...
     await db.execute(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT, from_email TEXT, from_name TEXT, text TEXT, image_url TEXT, date TEXT)`);
     await db.execute(`CREATE TABLE IF NOT EXISTS profiles (email TEXT PRIMARY KEY, avatar_url TEXT)`);
     try { await db.execute('ALTER TABLE messages ADD COLUMN image_url TEXT'); } catch(e) {}
