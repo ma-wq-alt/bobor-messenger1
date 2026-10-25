@@ -19,9 +19,10 @@
   
   .chat-container { display: flex; gap: 10px; height: 600px; }
   .chat-sidebar { width: 250px; background: #000; border: 1px solid #26262E; border-radius: 10px; overflow-y: auto; padding: 10px; }
-  .chat-sidebar .user-item { display: flex; align-items: center; gap: 10px; padding: 10px; cursor: pointer; border-radius: 8px; margin-bottom: 5px; color: #8A8A93; transition: 0.2s;}
+  .chat-sidebar .user-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; cursor: pointer; border-radius: 8px; margin-bottom: 5px; color: #8A8A93; transition: 0.2s;}
   .chat-sidebar .user-item:hover { background: #1a1a1a; }
   .chat-sidebar .user-item.active { background: rgba(255,61,0,.15); color: #FF3D00; }
+  .chat-sidebar .user-info { display: flex; align-items: center; gap: 10px; }
   
   .avatar { width: 36px; height: 36px; border-radius: 50%; background: #26262E; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; font-size: 16px; flex-shrink: 0; background-size: cover; background-position: center;}
   
@@ -39,6 +40,7 @@
   #profile-modal .card { width: 300px; }
   
   .header-actions { display:flex; align-items:center; gap:10px; }
+  .del-btn { background: #ff5555; color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 12px; cursor: pointer; display: none; }
 </style>
 </head>
 <body>
@@ -78,11 +80,11 @@
     <div class="chat-container">
       <div class="chat-sidebar" id="chat-sidebar">
         <div style="padding: 10px; font-size: 12px; color: #8A8A93; text-transform: uppercase;">Общий чат</div>
-        <div class="user-item active" onclick="selectChat('general', 'Общий чат', this)">
-          <div class="avatar" style="background:#00C878">#</div> Общий чат
+        <div class="user-item" onclick="selectChat('general', 'Общий чат', this)">
+          <div class="user-info"><div class="avatar" style="background:#00C878">#</div> Общий чат</div>
         </div>
         <div class="user-item" onclick="selectChat('news_channel', 'Новости', this)">
-          <div class="avatar" style="background:#C6FF00;color:#000">📢</div> Новости
+          <div class="user-info"><div class="avatar" style="background:#C6FF00;color:#000">📢</div> Новости</div>
         </div>
         <div style="padding: 10px; font-size: 12px; color: #8A8A93; text-transform: uppercase; margin-top:10px;">Личные чаты</div>
         <div id="users-list-container"></div>
@@ -129,7 +131,7 @@ function doLogin() {
       const err = await r.json();
       alert(err.error || 'Ошибка входа');
     }
-  }).catch(() => alert('Сервер не отвечает. Подождите минуту.'));
+  }).catch(() => alert('Сервер не отвечает.'));
 }
 
 function checkSavedLogin() {
@@ -199,9 +201,7 @@ function saveAvatar() {
   });
 }
 
-// ИСПРАВЛЕННЫЙ ID ЛИЧНОГО ЧАТА
 function getChatId(email1, email2) {
-  // Просто объединяем два email через подчеркивание (без @ и точек)
   return email1.replace(/[@.]/g, '_') + '___' + email2.replace(/[@.]/g, '_');
 }
 
@@ -214,11 +214,34 @@ function loadUsersList() {
       if (u.email === currentUser.email) return;
       const el = document.createElement('div');
       el.className = 'user-item';
-      el.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
+      
+      const info = document.createElement('div');
+      info.className = 'user-info';
+      info.innerHTML = `${makeAvatar(u.name, u.avatar, '#26262E')} ${u.name}`;
+      el.appendChild(info);
+
+      // Кнопка удаления (только для админа)
+      if (currentUser.role === 'admin') {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'del-btn';
+        delBtn.innerText = '✖';
+        delBtn.style.display = 'block';
+        delBtn.onclick = (e) => {
+          e.stopPropagation(); // чтобы не открывался чат
+          if (confirm(`Удалить аккаунт ${u.name} (${u.email}) из базы?`)) {
+            fetch('/api/admin/delete_user', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ targetEmail: u.email })
+            }).then(() => loadUsersList());
+          }
+        };
+        el.appendChild(delBtn);
+      }
+
       el.onclick = () => {
         document.querySelectorAll('.chat-sidebar .user-item').forEach(d => d.classList.remove('active'));
         el.classList.add('active');
-        // ID чата для нас и для собеседника должен быть ОДИНАКОВЫМ
         currentChatId = getChatId(currentUser.email, u.email);
         document.getElementById('chat-header').innerText = 'Чат с ' + u.name;
         loadChat();
@@ -243,7 +266,6 @@ function loadChat() {
     box.innerHTML = '';
     data.forEach(m => {
       const isMe = m.from_email === currentUser.email;
-      // Ищем аватарку отправителя строго по его email
       const sender = allUsers.find(u => u.email === m.from_email);
       const senderAvatar = isMe ? currentUser.avatar : (sender ? sender.avatar : '');
       
