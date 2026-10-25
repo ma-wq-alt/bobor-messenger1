@@ -5,7 +5,7 @@ import { createClient } from '@libsql/client';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb' })); // Увеличили лимит для картинок-аватарок
 app.use(express.static(path.join(__dirname, 'public')));
 
 const TURSO_URL = process.env.TURSO_URL;
@@ -16,8 +16,9 @@ async function initDB() {
   if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
   try {
     await db.execute(`CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT, from_email TEXT, from_name TEXT, text TEXT, image_url TEXT, date TEXT)`);
-    await db.execute(`CREATE TABLE IF NOT EXISTS profiles (email TEXT PRIMARY KEY, avatar_url TEXT)`);
+    await db.execute(`CREATE TABLE IF NOT EXISTS profiles (email TEXT PRIMARY KEY, avatar_url TEXT, custom_name TEXT)`);
     try { await db.execute('ALTER TABLE messages ADD COLUMN image_url TEXT'); } catch(e) {}
+    try { await db.execute('ALTER TABLE profiles ADD COLUMN custom_name TEXT'); } catch(e) {}
     console.log('✅ База готова к работе');
   } catch (e) { console.error('❌ Ошибка базы:', e.message); }
 }
@@ -30,41 +31,44 @@ app.post('/api/login', async (req, res) => {
     if (u.rows.length === 0) return res.status(401).json({ error: 'Аккаунт не найден' });
     if (u.rows[0].pwd !== password) return res.status(401).json({ error: 'Неверный пароль' });
     
-    const name = u.rows[0].display_name || u.rows[0].name;
-    const role = u.rows[0].role || 'user';
-    
-    const profile = await db.execute({ sql: 'SELECT avatar_url FROM profiles WHERE email = ?', args: [u.rows[0].email] });
+    const profile = await db.execute({ sql: 'SELECT avatar_url, custom_name FROM profiles WHERE email = ?', args: [u.rows[0].email] });
     const avatar = profile.rows.length > 0 ? profile.rows[0].avatar_url : '';
+    const customName = profile.rows.length > 0 ? profile.rows[0].custom_name : '';
 
-    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: role, avatar } });
+    // Если у пользователя есть кастомное имя, используем его. Иначе стандартное.
+    const finalName = customName || u.rows[0].display_name || u.rows[0].name;
+
+    return res.json({ success: true, user: { name: finalName, email: u.rows[0].email, role: u.rows[0].role || 'user', avatar } });
   } catch (e) { res.status(500).json({ error: 'Ошибка базы' }); }
 });
 
 app.get('/api/users', async (req, res) => {
   if (!db) return res.json([]);
   try {
-    const r = await db.execute('SELECT users.email, users.name, users.display_name, profiles.avatar_url FROM users LEFT JOIN profiles ON users.email = profiles.email');
-    res.json(r.rows.map(u => ({ email: u.email, name: u.display_name || u.name, avatar: u.avatar_url || '' })));
+    const r = await db.execute(`
+      SELECT users.email, users.name, users.display_name, users.role, profiles.avatar_url, profiles.custom_name 
+      FROM users 
+      LEFT JOIN profiles ON users.email = profiles.email
+    `);
+    res.json(r.rows.map(u => ({ 
+      email: u.email, 
+      name: u.custom_name || u.display_name || u.name, 
+      role: u.role,
+      avatar: u.avatar_url || '' 
+    })));
   } catch(e) { res.json([]); }
 });
 
-// УДАЛЕНИЕ АККАУНТА
-app.post('/api/admin/delete_user', async (req, res) => {
-  const { targetEmail } = req.body;
+// СОХРАНЕНИЕ ПРОФИЛЯ (Аватарка + Имя)
+app.post('/api/profile/save', async (req, res) => {
+  const { email, avatar_url, custom_name } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
   try {
-    await db.execute({ sql: 'DELETE FROM users WHERE email = ?', args: [targetEmail] });
-    await db.execute({ sql: 'DELETE FROM accounts WHERE email = ?', args: [targetEmail] });
-    await db.execute({ sql: 'DELETE FROM profiles WHERE email = ?', args: [targetEmail] });
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/profile/avatar', async (req, res) => {
-  const { email, avatar_url } = req.body;
-  if (!db) return res.status(500).json({ error: 'Нет базы' });
-  try {
-    await db.execute({ sql: `INSERT INTO profiles (email, avatar_url) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET avatar_url = ?`, args: [email, avatar_url, avatar_url] });
+    await db.execute({ 
+      sql: `INSERT INTO profiles (email, avatar_url, custom_name) VALUES (?, ?, ?) 
+            ON CONFLICT(email) DO UPDATE SET avatar_url = ?, custom_name = ?`, 
+      args: [email, avatar_url, custom_name, avatar_url, custom_name] 
+    });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
