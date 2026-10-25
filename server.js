@@ -5,12 +5,15 @@ import { createClient } from '@libsql/client';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(express.json({ limit: '20mb' })); // Увеличили лимит
+app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const TURSO_URL = process.env.TURSO_URL;
 const TURSO_TOKEN = process.env.TURSO_TOKEN;
 const db = (TURSO_URL && TURSO_TOKEN) ? createClient({ url: TURSO_URL, authToken: TURSO_TOKEN }) : null;
+
+const ADMIN_EMAIL = 'mar.maks999@gmail.com';
+const NEWS_ID = 'news_channel';
 
 async function initDB() {
   if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
@@ -38,11 +41,10 @@ app.post('/api/login', async (req, res) => {
     const customName = profile.rows.length > 0 ? profile.rows[0].custom_name : null;
     const finalName = customName || u.rows[0].display_name || u.rows[0].name;
 
-    return res.json({ success: true, user: { name: finalName, email: u.rows[0].email, role: 'user', avatar } });
+    return res.json({ success: true, user: { name: finalName, email: u.rows[0].email, role: u.rows[0].email === ADMIN_EMAIL ? 'admin' : 'user', avatar } });
   } catch (e) { res.status(500).json({ error: 'Ошибка базы: ' + e.message }); }
 });
 
-// Пользователи
 app.get('/api/users', async (req, res) => {
   if (!db) return res.json([]);
   try {
@@ -51,7 +53,6 @@ app.get('/api/users', async (req, res) => {
   } catch(e) { res.json([]); }
 });
 
-// Сохранить профиль (фото + имя)
 app.post('/api/profile', async (req, res) => {
   const { email, avatar_url, custom_name } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
@@ -65,7 +66,6 @@ app.post('/api/profile', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Сообщения
 app.get('/api/messages/:chat_id', async (req, res) => {
   if (!db) return res.json([]);
   try {
@@ -78,6 +78,11 @@ app.post('/api/messages', async (req, res) => {
   const { chat_id, from_email, from_name, text, image_data } = req.body;
   if (!db) return res.status(500).json({ error: 'Нет базы' });
   
+  // Запрет на писание в новости для всех, кроме админа
+  if (chat_id === NEWS_ID && from_email !== ADMIN_EMAIL) {
+    return res.status(403).json({ error: 'Писать в новости может только админ' });
+  }
+
   try {
     await db.execute({ 
       sql: 'INSERT INTO messages (chat_id, from_email, from_name, text, image_url, date) VALUES (?, ?, ?, ?, ?, ?)', 
