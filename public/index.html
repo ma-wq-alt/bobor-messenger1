@@ -1,229 +1,115 @@
-<!doctype html>
-<html lang="ru">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BANK OF BOBOR PRODUCTION</title>
-<style>
-  body{margin:0;background:#0B0B0F;color:#F5F5F7;font-family:Arial,sans-serif;font-size:15px;line-height:1.4}
-  .wrap{max-width:720px;margin:0 auto;padding:20px}
-  .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:16px;margin-bottom:12px}
-  .card.ttfbl{border-color:rgba(198,255,0,.5);box-shadow:0 0 24px rgba(198,255,0,.12)}
-  .btn{background:#FF3D00;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
-  .btn2{background:#C6FF00;color:#000;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
-  .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
-  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
-  input:focus,select:focus{outline:none;border-color:#FF3D00}
-  h1{margin:0 0 6px;font-size:24px}
-  h2{margin:0 0 10px;font-size:17px}
-  .muted{color:#8A8A93;font-size:13px}
-  .green{color:#C6FF00}
-  .red{color:#ff5555}
-  .big{font-size:30px;font-weight:bold;margin:6px 0}
-  .rowline{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #26262E;align-items:center;gap:8px}
-  nav{display:flex;gap:2px;overflow-x:auto;flex-wrap:wrap;margin-bottom:14px}
-  nav button{background:none;border:0;color:#8A8A93;padding:8px 10px;font-size:14px;cursor:pointer;border-radius:8px;font-family:inherit}
-  nav button.on{color:#FF3D00;font-weight:bold;background:rgba(255,61,0,.12)}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:480px){ .grid2{grid-template-columns:1fr} .header-right { flex-direction: column; align-items: flex-end; gap: 4px; } }
-  .header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-  #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
-  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
-  .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
-  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878;cursor:help}
-  .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00C878;margin-right:6px}
-  .offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
-  .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
-  .formula{background:rgba(255,255,255,.03);border-radius:8px;padding:8px;font-size:12px;color:#8A8A93;margin:6px 0;font-family:monospace}
-  .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
-  .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
-  .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
-  .login-box { max-width: 400px; margin: 50px auto; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <div id="err"></div>
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createClient } from '@libsql/client';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+app.use(express.json({ limit: '10mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+const TURSO_URL = process.env.TURSO_URL;
+const TURSO_TOKEN = process.env.TURSO_TOKEN;
+const db = (TURSO_URL && TURSO_TOKEN) ? createClient({ url: TURSO_URL, authToken: TURSO_TOKEN }) : null;
+
+const ADMIN_PASSWORD = 'тсб';
+
+async function initDB() {
+  if (!db) return console.log('⚠️ НЕТ БАЗЫ!');
+  try {
+    await db.batch([
+      `CREATE TABLE IF NOT EXISTS cinema_videos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, season INTEGER, episode INTEGER, url TEXT)`,
+      `CREATE TABLE IF NOT EXISTS watch_progress (user_email TEXT, video_id INTEGER, progress REAL, duration REAL, updated_at TEXT, PRIMARY KEY (user_email, video_id))`
+    ]);
+    console.log('✅ База и прогресс готовы');
+  } catch (e) { console.error('Ошибка базы:', e.message); }
+}
+
+app.post('/api/login', async (req, res) => {
+  const { email, password, secret } = req.body;
   
-  <!-- ЭКРАН ЛОГИНА -->
-  <div class="card login-box" id="login-screen">
-    <h2 style="text-align:center">🏦 BANK OF BOBOR</h2>
-    <p style="text-align:center;color:#8A8A93">Вход в аккаунт</p>
-    <div class="form-group"><label>Email</label><input type="email" id="log-email" placeholder="your@email.com"></div>
-    <div class="form-group"><label>Пароль</label><input type="password" id="log-pass" placeholder="Пароль"></div>
-    <div class="form-group"><label>Секретное слово</label><input type="password" id="log-secret" placeholder="Секретное слово"></div>
-    <button class="btn" style="width:100%" onclick="doLogin()">Войти</button>
-    <p style="text-align:center; margin-top:10px; font-size:12px; color:#8A8A93;">Демо-админ: mar.maks999@gmail.com / 1495 / тсб</p>
-  </div>
+  // Вход для Админа (по секретному паролю)
+  if (password === ADMIN_PASSWORD) {
+    return res.json({ success: true, user: { name: 'Админ', email: 'admin@bobor.ru', role: 'admin' } });
+  }
 
-  <div id="main-ui" style="display:none">
-    <div class="card">
-      <div class="rowline" style="border:none; padding:0">
-        <b>BANK OF BOBOR</b>
-        <div class="header-right">
-          <span class="save" id="online-counter">● 0 онлайн</span>
-          <button class="btn3" onclick="send({type:'refresh'})">🔄</button>
-          <button class="btn3" onclick="logout()">Выйти</button>
-        </div>
-      </div>
-    </div>
-
-    <nav id="nav-tabs">
-      <button data-tab="dashboard" class="on" onclick="switchTab('dashboard')">Обзор</button>
-      <button data-tab="wallet" onclick="switchTab('wallet')">Кошелёк</button>
-      <button data-tab="convert" onclick="switchTab('convert')">Конвертация</button>
-      <button data-tab="transfer" onclick="switchTab('transfer')">Перевод</button>
-      <button data-tab="vault" onclick="switchTab('vault')">Вклад</button>
-      <button data-tab="history" onclick="switchTab('history')">История</button>
-      <button data-tab="users" onclick="switchTab('users')">Люди</button>
-      <button data-tab="admin" id="tab-admin" style="display:none; color:#FF3D00" onclick="switchTab('admin')">Админка</button>
-    </nav>
-
-    <div id="content"></div>
-  </div>
-</div>
-
-<script>
-let me = null, accounts = {}, screen = 'dashboard', allUsers = [], adminUsers = [];
-let savedEmail = localStorage.getItem('bank_email') || '';
-let savedSecret = localStorage.getItem('bank_secret') || '';
-let ws;
-
-function connect() {
-  ws = new WebSocket((location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/');
-  ws.onopen = () => {
-    if (savedEmail && savedSecret) {
-      ws.send(JSON.stringify({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true}));
+  if (!db) return res.status(500).json({ error: 'Нет подключения к базе' });
+  
+  try {
+    const u = await db.execute({ sql: 'SELECT * FROM users WHERE email = ?', args: [email] });
+    if (u.rows.length === 0) return res.status(401).json({ error: 'Аккаунт не найден' });
+    if (u.rows[0].pwd !== password) return res.status(401).json({ error: 'Неверный пароль' });
+    // Если у пользователя в банке есть секретное слово, проверяем и его
+    if (u.rows[0].secret_word && secret && u.rows[0].secret_word !== secret) {
+        return res.status(401).json({ error: 'Неверное секретное слово' });
     }
-  };
-  ws.onmessage = (ev) => {
-    let m = JSON.parse(ev.data);
-    if (m.type === 'state') {
-      me = m.user; accounts = m.accounts;
-      localStorage.setItem('bank_email', me.email);
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('main-ui').style.display = 'block';
-      document.getElementById('tab-admin').style.display = me.role === 'admin' ? 'inline-block' : 'none';
-      render();
-    } else if (m.type === 'loggedout') {
-      me = null; localStorage.removeItem('bank_email'); location.reload();
-    } else if (m.type === 'error') {
-      alert(m.message);
-    } else if (m.type === 'users_list') {
-      allUsers = m.users;
-      if (screen === 'users') render();
-    } else if (m.type === 'admin_allusers') {
-      adminUsers = m.users;
-      if (screen === 'admin') render();
-    } else if (m.type === 'history') {
-      renderHistory(m.txs);
-    } else if (m.type === 'toast') {
-      alert(m.message);
+    
+    const name = u.rows[0].display_name || u.rows[0].name;
+    
+    // === ЖЕСТКАЯ ПРОВЕРКА НА АДМИНА ===
+    // Если это твой email, мы всегда даем роль админа, чтобы админка была доступна
+    let finalRole = u.rows[0].role || 'user';
+    if (email === 'mar.maks999@gmail.com') {
+      finalRole = 'admin';
     }
-  };
-}
-function send(obj) { ws.send(JSON.stringify(obj)); }
-function logout() { send({type:'logout'}); localStorage.removeItem('bank_secret'); }
 
-function doLogin() {
-  send({type:'login', email: document.getElementById('log-email').value, pwd: document.getElementById('log-pass').value, secret: document.getElementById('log-secret').value});
-  localStorage.setItem('bank_secret', document.getElementById('log-secret').value);
-}
+    return res.json({ success: true, user: { name: name, email: u.rows[0].email, role: finalRole } });
+  } catch (e) {
+    res.status(500).json({ error: 'Ошибка базы: ' + e.message });
+  }
+});
 
-function switchTab(t) {
-  screen = t;
-  document.querySelectorAll('#nav-tabs button').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab') === t));
-  if(t === 'users') send({type:'get_users'});
-  if(t === 'admin') send({type:'admin_allusers'});
-  if(t === 'history') send({type:'history'});
-  render();
-}
+app.get('/api/videos', async (req, res) => {
+  if (!db) return res.json([]);
+  try {
+    const r = await db.execute('SELECT * FROM cinema_videos ORDER BY season, episode');
+    res.json(r.rows);
+  } catch(e) { res.json([]); }
+});
 
-function fmt(m, c) { return (c==='TTFBL'?'◈ ':'') + (m/100).toFixed(c==='TTFBL'?0:2) + ' ' + c; } // Упрощенно для банка
-function h(t,c,txt){let n=document.createElement(t);if(c)n.className=c;if(txt)n.innerText=txt;return n;}
+app.post('/api/videos', async (req, res) => {
+  const { password, title, season, episode, url } = req.body;
+  if (password !== ADMIN_PASSWORD && password !== '1495') return res.status(401).json({ error: 'Нет доступа' });
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
+  try {
+    await db.execute({ sql: 'INSERT INTO cinema_videos (title, season, episode, url) VALUES (?, ?, ?, ?)', args: [title, season, episode, url] });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
-function render() {
-  const box = document.getElementById('content');
-  box.innerHTML = '';
-  document.getElementById('online-counter').innerText = `● ${allUsers.filter(u=>u.online).length} онлайн`;
+app.delete('/api/videos/:id', async (req, res) => {
+  const { password } = req.body;
+  if (password !== ADMIN_PASSWORD && password !== '1495') return res.status(401).json({ error: 'Нет доступа' });
+  if (!db) return res.status(500).json({ error: 'Нет базы' });
+  try {
+    await db.execute({ sql: 'DELETE FROM cinema_videos WHERE id = ?', args: [req.params.id] });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
 
-  if (screen === 'dashboard') {
-    box.innerHTML = `
-      <div class="card ttfbl">
-        <div class="tag">◈ TTFBL — основная</div>
-        <div class="big green">${(accounts.TTFBL.bal/100).toFixed(0)} TTFBL</div>
-        <div class="muted">Ваш главный кошелек</div>
-      </div>
-      <div class="card">
-        <h2>Все валюты</h2>
-        ${Object.keys(accounts).map(c => `<div class="rowline"><span>${c}</span><b>${(accounts[c].bal/100).toFixed(2)}</b></div>`).join('')}
-      </div>`;
-  }
-  else if (screen === 'wallet') {
-    box.innerHTML = `<div class="card"><h2>Кошелёк</h2>${Object.keys(accounts).map(c => `<div class="rowline"><span>${c}</span><span>${accounts[c].num}</span><b>${(accounts[c].bal/100).toFixed(2)}</b></div>`).join('')}</div>`;
-  }
-  else if (screen === 'convert') {
-    box.innerHTML = `<div class="card"><h2>Конвертация</h2>
-      <select id="c-from">${['TTFBL','RUB','USD','EUR','TRY','KZT'].map(c=>`<option>${c}</option>`).join('')}</select>
-      <select id="c-to">${['RUB','TTFBL','USD','EUR','TRY','KZT'].map(c=>`<option>${c}</option>`).join('')}</select>
-      <input type="number" id="c-amt" placeholder="Сумма" value="100">
-      <button class="btn" onclick="send({type:'convert', from:document.getElementById('c-from').value, to:document.getElementById('c-to').value, amt:document.getElementById('c-amt').value})">Конвертировать</button>
-    </div>`;
-  }
-  else if (screen === 'transfer') {
-    box.innerHTML = `<div class="card"><h2>Перевод</h2>
-      <select id="t-user">${allUsers.filter(u=>u.email!==me.email).map(u=>`<option value="${u.email}">${u.name}</option>`).join('')}</select>
-      <select id="t-cur">${['TTFBL','RUB','USD','EUR','TRY','KZT'].map(c=>`<option>${c}</option>`).join('')}</select>
-      <input type="number" id="t-amt" placeholder="Сумма" value="100">
-      <button class="btn" onclick="send({type:'transfer', toEmail:document.getElementById('t-user').value, cur:document.getElementById('t-cur').value, amt:document.getElementById('t-amt').value})">Перевести</button>
-    </div>`;
-  }
-  else if (screen === 'vault') {
-    box.innerHTML = `<div class="card"><h2>Вклад</h2>
-      <div class="big">${((accounts.TTFBL.vault_bal||0)/100).toFixed(0)} TTFBL</div>
-      <input type="number" id="v-amt" value="100">
-      <button class="btn2" onclick="send({type:'vault_deposit', amt:document.getElementById('v-amt').value})">Положить</button>
-      <button class="btn3" onclick="send({type:'vault_withdraw', amt:document.getElementById('v-amt').value})">Забрать</button>
-    </div>`;
-  }
-  else if (screen === 'users') {
-    box.innerHTML = `<div class="card"><h2>Люди</h2>${allUsers.map(u=>`<div class="rowline"><span>${u.name} ${u.email===me.email?'(Вы)':''}</span><span class="${u.online?'green':'muted'}">${u.online?'В сети':'Офлайн'}</span></div>`).join('')}</div>`;
-  }
-  else if (screen === 'history') {
-    box.innerHTML = `<div class="card" id="hist-box"><h2>История</h2>Загрузка...</div>`;
-    send({type:'history'});
-  }
-  else if (screen === 'admin') {
-    box.innerHTML = `<div class="card"><h2>Админка</h2>
-      ${adminUsers.map(u=>`<div class="user-block">
-        <b>${u.name} (${u.email})</b>
-        <div class="muted">Баланс TTFBL: ${(u.accounts.TTFBL.bal/100).toFixed(0)}</div>
-        <div style="margin-top:5px">
-          <input type="number" id="adm-amt-${u.email}" placeholder="Сумма" style="width:80px;padding:5px;display:inline-block">
-          <button class="btn2" onclick="send({type:'admin_mint', targetEmail:'${u.email}', cur:'TTFBL', amt:document.getElementById('adm-amt-${u.email}').value}); setTimeout(()=>send({type:'admin_allusers'}), 300)">+</button>
-          <button class="btn3" onclick="send({type:'admin_burn', targetEmail:'${u.email}', cur:'TTFBL', amt:document.getElementById('adm-amt-${u.email}').value}); setTimeout(()=>send({type:'admin_allusers'}), 300)">−</button>
-          <button class="btn3" onclick="send({type:'admin_ban', targetEmail:'${u.email}', hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300)">Бан 24ч</button>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  }
-}
+app.get('/api/progress/:email', async (req, res) => {
+  if (!db) return res.json([]);
+  try {
+    const r = await db.execute({ sql: 'SELECT * FROM watch_progress WHERE user_email = ?', args: [req.params.email] });
+    res.json(r.rows);
+  } catch(e) { res.json([]); }
+});
 
-function renderHistory(txs) {
-  const box = document.getElementById('hist-box');
-  if(!box) return;
-  box.innerHTML = `<h2>История</h2>` + txs.map(t => `
-    <div class="rowline">
-      <div>
-        <div>${t.descr}</div>
-        <div class="muted" style="font-size:11px">${t.date}</div>
-      </div>
-      <b class="${t.from_email===me.email?'red':'green'}">${t.from_email===me.email?'-':'+'}${(t.amt/100).toFixed(2)} ${t.cur}</b>
-    </div>
-  `).join('');
-}
+app.post('/api/progress', async (req, res) => {
+  const { email, video_id, progress, duration } = req.body;
+  if (!db || !email || email === 'guest') return res.json({ success: false });
+  try {
+    await db.execute({
+      sql: `INSERT INTO watch_progress (user_email, video_id, progress, duration, updated_at) 
+            VALUES (?, ?, ?, ?, ?) 
+            ON CONFLICT(user_email, video_id) DO UPDATE SET progress = ?, duration = ?, updated_at = ?`,
+      args: [email, video_id, progress, duration, new Date().toISOString(), progress, duration, new Date().toISOString()]
+    });
+    res.json({ success: true });
+  } catch(e) { 
+    res.status(500).json({ error: e.message }); 
+  }
+});
 
-connect();
-</script>
-</body>
-</html>
+const PORT = process.env.PORT || 3000;
+initDB().then(() => app.listen(PORT, () => console.log(`🎬 BOBOR PRODUCTION на :${PORT}`)));
