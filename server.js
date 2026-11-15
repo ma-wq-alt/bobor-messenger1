@@ -15,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Инициализация Gemini (через OpenAI-совместимый интерфейс)
+// Инициализация Gemini через OpenAI-совместимый интерфейс
 let openai = null;
 if (process.env.GEMINI_API_KEY) {
   openai = new OpenAI({
@@ -24,7 +24,7 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
-// Проверка статуса сервера и ИИ
+// Проверка статуса сервера
 app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
@@ -58,7 +58,6 @@ app.post("/api/chat", async (req, res) => {
     return res.status(400).json({ error: "message too long (max 500)" });
   }
 
-  // Если ключа нет — отдаем заглушку
   if (!openai) {
     return res.json({
       reply: fallbackReply(message),
@@ -122,7 +121,7 @@ function fallbackReply(message) {
   return pick(replies.unknown);
 }
 
-// SPA fallback — все остальные запросы отдают index.html
+// Все остальные запросы отдают index.html (для работы SPA)
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
