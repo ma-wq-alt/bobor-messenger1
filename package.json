@@ -1,13 +1,20 @@
 {
-  "name": "bobor-messenger",
+  "name": "bobor-linguo",
   "version": "1.0.0",
+  "description": "BOBOR-LINGUO — учи сербский с бобром",
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "openai": "^4.52.0",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
