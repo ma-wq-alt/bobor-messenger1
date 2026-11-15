@@ -12,11 +12,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Раздаем статику из папки public (там лежит index.html)
 app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Инициализация Gemini через OpenAI-совместимый интерфейс
+// Инициализация Gemini (через OpenAI-совместимый интерфейс)
 let openai = null;
 if (process.env.GEMINI_API_KEY) {
   openai = new OpenAI({
@@ -25,9 +24,7 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
-// ============================================================
-// HEALTH CHECK — проверка статуса ИИ
-// ============================================================
+// Проверка статуса сервера и ИИ
 app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
@@ -37,9 +34,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// ============================================================
-// ЧАТ С МАРКО — настоящая нейронка на сербском
-// ============================================================
+// Системный промпт для Марко
 const SYSTEM_PROMPT = `Ti si Marko, prijateljski bobar 🦫 koji pomaže ljudima da nauče srpski jezik.
 
 PRAVILA:
@@ -50,13 +45,9 @@ PRAVILA:
 5. Ako korisnik piše na ruskom — pokušaj da razumeš, ali odgovaraj na srpskom.
 6. Ako korisnik pita nešto van teme — ljubazno skreni temu na učenje srpskog.
 7. Povremeno postavljaj pitanje korisniku da održiš razgovor.
-8. Koristi jednostavan rečnik za početnike.
+8. Koristi jednostavan rečnik za početnike.`;
 
-Primeri dobrih odgovora:
-- "Здраво! Како си данас?"
-- "Одлично! Шта си радио јутрос?"
-- "Лепо! Реци ми, одакле си?"`;
-
+// Эндпоинт для чата
 app.post("/api/chat", async (req, res) => {
   const { message, history } = req.body || {};
   
@@ -67,7 +58,7 @@ app.post("/api/chat", async (req, res) => {
     return res.status(400).json({ error: "message too long (max 500)" });
   }
 
-  // Если ключа нет — заглушка
+  // Если ключа нет — отдаем заглушку
   if (!openai) {
     return res.json({
       reply: fallbackReply(message),
@@ -79,7 +70,6 @@ app.post("/api/chat", async (req, res) => {
   try {
     const messages = [{ role: "system", content: SYSTEM_PROMPT }];
     
-    // Добавляем историю диалога (последние 10 сообщений)
     if (Array.isArray(history)) {
       history.slice(-10).forEach(m => {
         if (m.who === "user") messages.push({ role: "user", content: m.sr });
@@ -99,7 +89,6 @@ app.post("/api/chat", async (req, res) => {
     res.json({ reply });
   } catch (err) {
     console.error("Gemini error:", err.message);
-    // В случае ошибки API (лимит, сбой) — отдаем заготовку, чтобы чат не вис
     res.json({
       reply: fallbackReply(message),
       error: "ai_error"
@@ -107,7 +96,7 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-// Офлайн-заглушка (если нет ключа или ошибка API)
+// Заглушка на случай ошибок
 function fallbackReply(message) {
   const t = message.toLowerCase().trim();
   const replies = {
@@ -133,9 +122,7 @@ function fallbackReply(message) {
   return pick(replies.unknown);
 }
 
-// ============================================================
-// SPA fallback — все не-api запросы отдают index.html
-// ============================================================
+// SPA fallback — все остальные запросы отдают index.html
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
